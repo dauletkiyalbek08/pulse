@@ -208,6 +208,10 @@ export type Database = {
           id: string
           name: string
           niche: string
+          office_address: string | null
+          office_lat: number | null
+          office_lng: number | null
+          office_radius_m: number
           owner_id: string
           plan: string
           status: string
@@ -221,6 +225,10 @@ export type Database = {
           id?: string
           name: string
           niche: string
+          office_address?: string | null
+          office_lat?: number | null
+          office_lng?: number | null
+          office_radius_m?: number
           owner_id: string
           plan?: string
           status?: string
@@ -234,6 +242,10 @@ export type Database = {
           id?: string
           name?: string
           niche?: string
+          office_address?: string | null
+          office_lat?: number | null
+          office_lng?: number | null
+          office_radius_m?: number
           owner_id?: string
           plan?: string
           status?: string
@@ -336,6 +348,45 @@ export type Database = {
           project_id?: string
           scheduled_at?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      shifts: {
+        Row: {
+          created_at: string
+          ended_at: string | null
+          id: string
+          project_id: string
+          start_distance_m: number | null
+          start_lat: number | null
+          start_lng: number | null
+          started_at: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          project_id: string
+          start_distance_m?: number | null
+          start_lat?: number | null
+          start_lng?: number | null
+          started_at?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          project_id?: string
+          start_distance_m?: number | null
+          start_lat?: number | null
+          start_lng?: number | null
+          started_at?: string
+          status?: string
+          user_id?: string
         }
         Relationships: []
       }

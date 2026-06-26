@@ -11,7 +11,9 @@ export const getProject = cache(async (projectId: string) => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("projects")
-    .select("id, name, niche, icon, accent_color, owner_id")
+    .select(
+      "id, name, niche, icon, accent_color, owner_id, office_lat, office_lng, office_radius_m, office_address",
+    )
     .eq("id", projectId)
     .maybeSingle();
   return data;
