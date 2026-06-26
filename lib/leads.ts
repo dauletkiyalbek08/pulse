@@ -1,22 +1,26 @@
 import type { Niche } from "@/lib/niches";
 
 /**
- * Статусы лидов и источники. Статусы различаются по нише (ТЗ, раздел 6):
- * education: new|qualified|trial|sale; ecommerce: new|processed|sale.
+ * Статусы лидов и источники. Пайплайн по нише (AmoCRM-стиль):
+ * education: new → assigned → trial → trial_done → paid (+ lost)
+ * ecommerce: new → processed → paid (+ lost)
  */
-export type PillTone = "neutral" | "info" | "warning" | "violet" | "success";
+export type PillTone = "neutral" | "info" | "warning" | "violet" | "success" | "danger";
 
 const EDUCATION_STATUS: Record<string, { label: string; tone: PillTone }> = {
   new: { label: "Новый", tone: "neutral" },
-  qualified: { label: "Квалифицирован", tone: "info" },
-  trial: { label: "Пробный урок", tone: "violet" },
-  sale: { label: "Продажа", tone: "success" },
+  assigned: { label: "Назначен", tone: "info" },
+  trial: { label: "Пробный", tone: "violet" },
+  trial_done: { label: "Пробный пройден", tone: "warning" },
+  paid: { label: "Оплатил", tone: "success" },
+  lost: { label: "Потерян", tone: "danger" },
 };
 
 const ECOMMERCE_STATUS: Record<string, { label: string; tone: PillTone }> = {
   new: { label: "Новый", tone: "neutral" },
   processed: { label: "Обработан", tone: "info" },
-  sale: { label: "Продажа", tone: "success" },
+  paid: { label: "Оплатил", tone: "success" },
+  lost: { label: "Потерян", tone: "danger" },
 };
 
 export function getLeadStatusMeta(niche: Niche, status: string) {
@@ -24,12 +28,23 @@ export function getLeadStatusMeta(niche: Niche, status: string) {
   return map[status] ?? { label: status, tone: "neutral" as PillTone };
 }
 
-/** Порядок статусов для сводных чипов сверху страницы. */
+/** Полный порядок статусов воронки (включая «Потерян») — колонки канбана, фильтр. */
 export function leadStatusOrder(niche: Niche): string[] {
   return niche === "ecommerce"
-    ? ["new", "processed", "sale"]
-    : ["new", "qualified", "trial", "sale"];
+    ? ["new", "processed", "paid", "lost"]
+    : ["new", "assigned", "trial", "trial_done", "paid", "lost"];
 }
+
+/** Следующий шаг по лиду в статусе (подсказка на карточке канбана). */
+export const NEXT_STEP: Record<string, string> = {
+  new: "Связаться с клиентом",
+  assigned: "Назначить пробный урок",
+  trial: "Провести пробный урок",
+  trial_done: "Закрыть на оплату",
+  processed: "Подтвердить заказ",
+  paid: "Сделка закрыта",
+  lost: "Лид потерян",
+};
 
 const SOURCE_LABEL: Record<string, string> = {
   instagram: "Instagram",

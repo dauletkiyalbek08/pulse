@@ -6,6 +6,7 @@ const TONE_CLASS: Record<PillTone, string> = {
   warning: "bg-amber-50 text-amber-600",
   violet: "bg-violet-50 text-violet-600",
   success: "bg-brand-soft text-brand-ink",
+  danger: "bg-red-50 text-red-600",
 };
 
 export function Pill({

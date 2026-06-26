@@ -19,7 +19,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { getCohortFunnel } from "@/lib/funnel";
 import type { DateRange } from "@/lib/date-range";
 
-const QUALIFYING_STATUSES = ["qualified", "trial", "sale"];
+const QUALIFYING_STATUSES = ["assigned", "trial", "trial_done", "paid"];
 
 function pluralLeads(n: number): string {
   const mod10 = n % 10;

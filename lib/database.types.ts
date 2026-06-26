@@ -81,6 +81,33 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_notes: {
+        Row: {
+          author_id: string | null
+          created_at: string
+          id: string
+          lead_id: string
+          project_id: string
+          text: string
+        }
+        Insert: {
+          author_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id: string
+          project_id: string
+          text: string
+        }
+        Update: {
+          author_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string
+          project_id?: string
+          text?: string
+        }
+        Relationships: []
+      }
       metrics_daily: {
         Row: {
           ad_spend: number
