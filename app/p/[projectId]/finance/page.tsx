@@ -18,6 +18,7 @@ import { ExportButton } from "@/components/export-button";
 import { FinanceForm } from "@/components/finance-form";
 import { FinanceLedger, type LedgerRow } from "@/components/finance-ledger";
 import { UsdRateEditor } from "@/components/usd-rate-editor";
+import { getLiveAds } from "@/lib/ads-live";
 
 export default async function FinancePage({
   params,
@@ -33,7 +34,7 @@ export default async function FinancePage({
   const supabase = await createClient();
   const period = currentPeriod();
 
-  const [{ data: entries }, { data: adRows }, { data: salesRows }, { data: payrolls }, { data: project }] =
+  const [{ data: entries }, { data: salesRows }, { data: payrolls }, { data: project }, live] =
     await Promise.all([
       supabase
         .from("finance_entries")
@@ -42,12 +43,6 @@ export default async function FinancePage({
         .gte("spent_on", range.from)
         .lte("spent_on", range.to)
         .order("spent_on", { ascending: false }),
-      supabase
-        .from("ad_spend")
-        .select("id, channel, objective, campaign, amount, currency, spent_on")
-        .eq("project_id", projectId)
-        .gte("spent_on", range.from)
-        .lte("spent_on", range.to),
       supabase
         .from("sales")
         .select("amount")
@@ -60,28 +55,53 @@ export default async function FinancePage({
         .eq("project_id", projectId)
         .eq("period", period),
       supabase.from("projects").select("usd_rate").eq("id", projectId).maybeSingle(),
+      getLiveAds(projectId, range.from, range.to),
     ]);
 
   const usdRate = Number(project?.usd_rate ?? 500);
   const manual = (entries ?? []) as LedgerRow[];
 
-  // Реклама приходит из «Рекламы» в валюте кабинета (обычно USD) → переводим в ₸
+  // Реклама (в валюте кабинета, обычно USD) → переводим в ₸ по курсу проекта.
+  // Подключён кабинет → живые данные за период; иначе — сохранённый снимок.
   let adSpendUsd = 0;
-  const adAsLedger: LedgerRow[] = (adRows ?? []).map((a) => {
-    const native = Number(a.amount);
-    const kzt = a.currency === "USD" ? native * usdRate : native;
-    if (a.currency === "USD") adSpendUsd += native;
-    return {
-      id: a.id,
-      kind: "expense",
-      category: "ad_spend",
-      title: `${channelShort(a.channel)} · ${a.campaign}`,
-      amount: kzt,
-      spent_on: a.spent_on,
-      note: `${objectiveLabel(a.objective)}${a.currency === "USD" ? ` · ${formatUsd(native)}` : ""}`,
-      locked: true,
-    };
-  });
+  let adAsLedger: LedgerRow[] = [];
+  if (live.connected) {
+    adAsLedger = live.campaigns.map((c) => {
+      adSpendUsd += Number(c.spend);
+      return {
+        id: c.id,
+        kind: "expense",
+        category: "ad_spend",
+        title: `Meta · ${c.name}`,
+        amount: Number(c.spend) * usdRate,
+        spent_on: range.to,
+        note: `${objectiveLabel(c.objective)} · ${formatUsd(Number(c.spend))}`,
+        locked: true,
+      };
+    });
+  } else {
+    const { data: adRows } = await supabase
+      .from("ad_spend")
+      .select("id, channel, objective, campaign, amount, currency, spent_on")
+      .eq("project_id", projectId)
+      .gte("spent_on", range.from)
+      .lte("spent_on", range.to);
+    adAsLedger = (adRows ?? []).map((a) => {
+      const native = Number(a.amount);
+      const kzt = a.currency === "USD" ? native * usdRate : native;
+      if (a.currency === "USD") adSpendUsd += native;
+      return {
+        id: a.id,
+        kind: "expense",
+        category: "ad_spend",
+        title: `${channelShort(a.channel)} · ${a.campaign}`,
+        amount: kzt,
+        spent_on: a.spent_on,
+        note: `${objectiveLabel(a.objective)}${a.currency === "USD" ? ` · ${formatUsd(native)}` : ""}`,
+        locked: true,
+      };
+    });
+  }
 
   const adSpendTotal = adAsLedger.reduce((s, r) => s + r.amount, 0);
   const manualExpense = manual.filter((r) => r.kind === "expense").reduce((s, r) => s + Number(r.amount), 0);

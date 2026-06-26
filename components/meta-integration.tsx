@@ -2,12 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plug, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Link2Off } from "lucide-react";
-import { formatUsd, formatDateTime } from "@/lib/format";
+import { Plug, Loader2, CheckCircle2, AlertTriangle, Link2Off } from "lucide-react";
+import { formatDateTime } from "@/lib/format";
 import {
   connectMeta,
   disconnectMeta,
-  syncMeta,
   type MetaStatus,
   type AdPurpose,
 } from "@/app/p/[projectId]/ads/integration-actions";
@@ -17,17 +16,11 @@ export function MetaIntegration({
   purpose,
   title,
   status,
-  rangeFrom,
-  rangeTo,
-  rangeLabel,
 }: {
   projectId: string;
   purpose: AdPurpose;
   title: string;
   status: MetaStatus | null;
-  rangeFrom: string;
-  rangeTo: string;
-  rangeLabel: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -49,22 +42,6 @@ export function MetaIntegration({
         return;
       }
       setMsg({ kind: "ok", text: `Подключено: ${res.name} · ${res.currency}` });
-      router.refresh();
-    });
-  }
-
-  function sync() {
-    setMsg(null);
-    startTransition(async () => {
-      const res = await syncMeta(projectId, purpose, rangeFrom, rangeTo);
-      if (!res.ok) {
-        setMsg({ kind: "err", text: res.error ?? "Ошибка синхронизации" });
-        return;
-      }
-      setMsg({
-        kind: "ok",
-        text: `Синхронизировано: ${formatUsd(res.total ?? 0)} · ${res.days ?? 0} дн. · ${res.leads ?? 0} лид(ов)`,
-      });
       router.refresh();
     });
   }
@@ -183,23 +160,17 @@ export function MetaIntegration({
       )}
 
       <div className="mt-3 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={sync}
-          disabled={pending}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60"
-        >
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Синхронизировать ({rangeLabel})
-        </button>
+        <span className="rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-ink">
+          Обновляется автоматически по выбранному периоду
+        </span>
         <button
           type="button"
           onClick={disconnect}
           disabled={pending}
           aria-label="Отключить"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
+          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
         >
-          <Link2Off className="h-4 w-4" />
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2Off className="h-4 w-4" />}
         </button>
       </div>
 

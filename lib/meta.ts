@@ -158,7 +158,7 @@ export async function fetchMetaCampaigns(
   try {
     const sres = await fetch(
       `${GRAPH}/act_${id}/campaigns?fields=id,effective_status&limit=500&access_token=${encodeURIComponent(token)}`,
-      { cache: "no-store" },
+      { next: { revalidate: 120 } },
     );
     const sjson = (await sres.json()) as { data?: { id: string; effective_status?: string }[] };
     for (const c of sjson.data ?? []) statusById.set(c.id, mapStatus(c.effective_status));
@@ -173,7 +173,7 @@ export async function fetchMetaCampaigns(
 
   const out: MetaCampaign[] = [];
   for (let page = 0; page < 50 && url; page++) {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, { next: { revalidate: 120 } });
     const json = (await res.json()) as {
       data?: CampaignInsightRow[];
       paging?: { next?: string };

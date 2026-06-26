@@ -1,0 +1,73 @@
+/**
+ * «Живые» данные рекламы из Meta за выбранный период (server-only).
+ * Тянутся прямо при рендере страницы по диапазону дат — без ручной синхронизации.
+ * Токен расшифровывается на сервере и наружу не уходит.
+ */
+import { createAdminClient } from "@/lib/supabase/admin";
+import { decryptSecret } from "@/lib/crypto";
+import { fetchMetaCampaigns } from "@/lib/meta";
+import type { CampaignRow } from "@/components/campaigns-table";
+
+export interface LiveAds {
+  /** Есть ли хотя бы один подключённый кабинет. */
+  connected: boolean;
+  /** Кампании за период (в нативной валюте кабинета, обычно USD). */
+  campaigns: (CampaignRow & { objective: string })[];
+  errors: string[];
+}
+
+export async function getLiveAds(
+  projectId: string,
+  since: string,
+  until: string,
+): Promise<LiveAds> {
+  const admin = createAdminClient();
+  const { data: integs } = await admin
+    .from("meta_integration")
+    .select("purpose, ad_account_id, token_enc")
+    .eq("project_id", projectId);
+
+  if (!integs || integs.length === 0) {
+    return { connected: false, campaigns: [], errors: [] };
+  }
+
+  const campaigns: (CampaignRow & { objective: string })[] = [];
+  const errors: string[] = [];
+
+  for (const ig of integs) {
+    const objective = ig.purpose === "vacancy" ? "vacancy" : "course";
+    try {
+      const token = decryptSecret(ig.token_enc);
+      const camps = await fetchMetaCampaigns(ig.ad_account_id, token, since, until);
+      for (const c of camps) {
+        campaigns.push({
+          id: c.externalId || `${objective}-${c.name}`,
+          name: c.name,
+          objective,
+          status: c.status,
+          spend: c.spend,
+          impressions: c.impressions,
+          clicks: c.clicks,
+          reach: c.reach,
+          leads: c.leads,
+        });
+      }
+      await admin
+        .from("meta_integration")
+        .update({ status: "connected", last_error: null, last_synced_at: new Date().toISOString() })
+        .eq("project_id", projectId)
+        .eq("purpose", ig.purpose);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "ошибка";
+      errors.push(`${objective === "vacancy" ? "Вакансии" : "Курс"}: ${msg}`);
+      await admin
+        .from("meta_integration")
+        .update({ status: "error", last_error: msg })
+        .eq("project_id", projectId)
+        .eq("purpose", ig.purpose);
+    }
+  }
+
+  campaigns.sort((a, b) => b.spend - a.spend);
+  return { connected: true, campaigns, errors };
+}

@@ -3,13 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAccess } from "@/lib/queries";
 import { rangeFromSearchParams } from "@/lib/date-range";
 import { objectiveLabel } from "@/lib/ads";
-import { formatUsd, formatNumber, formatDate, formatPercent } from "@/lib/format";
+import { formatUsd, formatNumber, formatPercent } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { ExportButton } from "@/components/export-button";
 import { CampaignsTable, type CampaignRow } from "@/components/campaigns-table";
 import { MetaIntegration } from "@/components/meta-integration";
 import { getMetaStatuses } from "@/app/p/[projectId]/ads/integration-actions";
+import { getLiveAds } from "@/lib/ads-live";
 
 export default async function AdsPage({
   params,
@@ -24,19 +25,24 @@ export default async function AdsPage({
 
   const supabase = await createClient();
 
-  const [{ data: campData }, statuses] = await Promise.all([
-    supabase
-      .from("ad_campaigns")
-      .select("id, name, objective, status, spend, impressions, clicks, reach, leads, period_from, period_to")
-      .eq("project_id", projectId)
-      .order("spend", { ascending: false }),
+  // Подключённые кабинеты → тянем кампании живьём за выбранный период.
+  // Если ничего не подключено — показываем сохранённый демо-снимок.
+  const [statuses, live] = await Promise.all([
     getMetaStatuses(projectId),
+    getLiveAds(projectId, range.from, range.to),
   ]);
 
-  const campaigns = (campData ?? []) as (CampaignRow & {
-    period_from: string | null;
-    period_to: string | null;
-  })[];
+  let campaigns: CampaignRow[];
+  if (live.connected) {
+    campaigns = live.campaigns;
+  } else {
+    const { data } = await supabase
+      .from("ad_campaigns")
+      .select("id, name, objective, status, spend, impressions, clicks, reach, leads")
+      .eq("project_id", projectId)
+      .order("spend", { ascending: false });
+    campaigns = (data ?? []) as CampaignRow[];
+  }
 
   const courseStatus = statuses.find((s) => s.purpose === "course") ?? null;
   const vacancyStatus = statuses.find((s) => s.purpose === "vacancy") ?? null;
@@ -51,11 +57,6 @@ export default async function AdsPage({
   const cpm = totalImpr > 0 ? (totalSpend / totalImpr) * 1000 : 0;
   const cpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
   const ctr = totalImpr > 0 ? (totalClicks / totalImpr) * 100 : 0;
-
-  const campPeriod =
-    campaigns[0]?.period_from && campaigns[0]?.period_to
-      ? `${formatDate(campaigns[0].period_from)} – ${formatDate(campaigns[0].period_to)}`
-      : null;
 
   const round2 = (v: number) => Math.round(v * 100) / 100;
   const campExport = campaigns.map((c) => [
@@ -100,26 +101,16 @@ export default async function AdsPage({
         </div>
       )}
 
+      {live.errors.length > 0 && (
+        <div className="mb-6 rounded-card bg-red-50 px-4 py-3 text-sm text-red-600">
+          Ошибка Meta: {live.errors.join("; ")}. Проверьте токен кабинета (мог истечь).
+        </div>
+      )}
+
       {/* Два рекламных кабинета: курс и вакансии */}
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <MetaIntegration
-          projectId={projectId}
-          purpose="course"
-          title="Курс"
-          status={courseStatus}
-          rangeFrom={range.from}
-          rangeTo={range.to}
-          rangeLabel={range.label}
-        />
-        <MetaIntegration
-          projectId={projectId}
-          purpose="vacancy"
-          title="Вакансии"
-          status={vacancyStatus}
-          rangeFrom={range.from}
-          rangeTo={range.to}
-          rangeLabel={range.label}
-        />
+        <MetaIntegration projectId={projectId} purpose="course" title="Курс" status={courseStatus} />
+        <MetaIntegration projectId={projectId} purpose="vacancy" title="Вакансии" status={vacancyStatus} />
       </div>
 
       {/* Кампании (как в Ads Manager) */}
@@ -128,8 +119,10 @@ export default async function AdsPage({
           <h2 className="text-lg font-semibold text-ink">Кампании</h2>
           <p className="text-xs text-muted">
             {campaigns.length > 0
-              ? `${campaigns.length} кампаний${campPeriod ? ` · ${campPeriod}` : ""}`
-              : "Подключите кабинет и нажмите «Синхронизировать»"}
+              ? `${campaigns.length} кампаний · ${range.label}`
+              : live.connected
+                ? `За период «${range.label}» данных нет`
+                : "Подключите кабинет — данные подтянутся автоматически"}
           </p>
         </div>
         {campaigns.length > 0 && (
