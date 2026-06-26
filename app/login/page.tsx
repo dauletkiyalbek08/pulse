@@ -8,16 +8,16 @@ const initialState: LoginState = { error: null };
 
 /** Демо-входы: один клик подставляет логин/пароль, дальше жмёшь «Войти». */
 const DEMO_PASSWORD = "demo1234";
-const DEMO_ACCOUNTS: { label: string; email: string }[] = [
-  { label: "Директор", email: "director@demo.pulse" },
-  { label: "Руководитель продаж", email: "head_sales@demo.pulse" },
-  { label: "Менеджер", email: "manager@demo.pulse" },
-  { label: "Хантер", email: "hunter@demo.pulse" },
-  { label: "Учитель", email: "teacher@demo.pulse" },
-  { label: "Маркетолог", email: "marketer@demo.pulse" },
-  { label: "Таргетолог", email: "targetologist@demo.pulse" },
-  { label: "SMM", email: "smm@demo.pulse" },
-  { label: "Бухгалтер", email: "accountant@demo.pulse" },
+const DEMO_ACCOUNTS: { label: string; name: string; email: string }[] = [
+  { label: "Директор", name: "Соколова А. В.", email: "director@demo.pulse" },
+  { label: "Руководитель продаж", name: "Руслан Жаксыбаев", email: "head_sales@demo.pulse" },
+  { label: "Менеджер", name: "Динара Касымова", email: "manager@demo.pulse" },
+  { label: "Хантер", name: "Ерлан Сериков", email: "hunter@demo.pulse" },
+  { label: "Учитель", name: "Мария Лебедева", email: "teacher@demo.pulse" },
+  { label: "Маркетолог", name: "Сабина Ермекова", email: "marketer@demo.pulse" },
+  { label: "Таргетолог", name: "Данияр Оспанов", email: "targetologist@demo.pulse" },
+  { label: "SMM", name: "Камила Идрисова", email: "smm@demo.pulse" },
+  { label: "Бухгалтер", name: "Гульнара Сейтова", email: "accountant@demo.pulse" },
 ];
 
 export default function LoginPage() {
@@ -115,13 +115,14 @@ export default function LoginPage() {
                   key={acc.email}
                   type="button"
                   onClick={() => fillDemo(acc.email)}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
+                  className={`rounded-xl border px-3 py-2 text-left transition ${
                     selected
-                      ? "border-brand bg-brand-soft font-medium text-brand-ink"
+                      ? "border-brand bg-brand-soft text-brand-ink"
                       : "border-line bg-canvas text-ink hover:border-brand/40 hover:bg-brand-soft/40"
                   }`}
                 >
-                  {acc.label}
+                  <span className="block truncate text-sm font-medium">{acc.name}</span>
+                  <span className="block truncate text-xs text-muted">{acc.label}</span>
                 </button>
               );
             })}

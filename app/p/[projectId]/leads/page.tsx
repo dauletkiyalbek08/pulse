@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getProject, requireAccess } from "@/lib/queries";
+import { getProject, requireAccess, getEffectiveRole } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
 import { getCohortFunnel } from "@/lib/funnel";
 import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
@@ -23,15 +23,25 @@ export default async function LeadsPage({
   const supabase = await createClient();
   const project = await getProject(projectId);
   const niche = getNiche(project?.niche);
+  const role = await getEffectiveRole(projectId);
+
+  // Хантер видит только свои лиды
+  let leadsQuery = supabase
+    .from("leads")
+    .select("id, full_name, phone, source, status, assigned_to, value, created_at")
+    .eq("project_id", projectId)
+    .gte("created_at", range.from)
+    .lt("created_at", rangeEndExclusive(range))
+    .order("created_at", { ascending: false });
+  if (role === "hunter") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    leadsQuery = leadsQuery.eq("assigned_to", user?.id ?? "");
+  }
 
   const [{ data: leads }, funnel] = await Promise.all([
-    supabase
-      .from("leads")
-      .select("id, full_name, phone, source, status, assigned_to, value, created_at")
-      .eq("project_id", projectId)
-      .gte("created_at", range.from)
-      .lt("created_at", rangeEndExclusive(range))
-      .order("created_at", { ascending: false }),
+    leadsQuery,
     getCohortFunnel(projectId, niche.key, range),
   ]);
   const leadRows = leads ?? [];

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { pickNextHunter } from "@/lib/distribution";
 
 export interface NewLeadState {
   error: string | null;
@@ -28,6 +29,9 @@ export async function createLead(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Round-robin: лид падает следующему хантеру на смене (или остаётся свободным)
+  const assignedTo = await pickNextHunter(supabase, projectId);
+
   const { error } = await supabase.from("leads").insert({
     project_id: projectId,
     full_name: fullName,
@@ -35,6 +39,7 @@ export async function createLead(
     source,
     status: "new",
     value: Number.isFinite(value) ? value : 0,
+    assigned_to: assignedTo,
   });
 
   if (error) return { error: "Не удалось добавить лид. Попробуйте ещё раз.", ok: false };
