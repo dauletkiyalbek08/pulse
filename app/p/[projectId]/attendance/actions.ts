@@ -107,15 +107,13 @@ export async function saveOffice(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("projects")
-    .update({
-      office_lat: lat,
-      office_lng: lng,
-      office_radius_m: Math.max(10, Math.round(radius)),
-      office_address: address || null,
-    })
-    .eq("id", projectId);
+  const { error } = await supabase.rpc("set_office", {
+    p_project_id: projectId,
+    p_lat: lat,
+    p_lng: lng,
+    p_radius: Math.round(radius),
+    p_address: address || "",
+  });
   if (error) return { ok: false, error: "Не удалось сохранить офис" };
 
   revalidatePath(`/p/${projectId}/attendance`);

@@ -13,6 +13,7 @@ const DEMO_ACCOUNTS: { label: string; name: string; email: string }[] = [
   { label: "Руководитель продаж", name: "Руслан Жаксыбаев", email: "head_sales@demo.pulse" },
   { label: "Менеджер", name: "Динара Касымова", email: "manager@demo.pulse" },
   { label: "Хантер", name: "Ерлан Сериков", email: "hunter@demo.pulse" },
+  { label: "Хантер", name: "Сергей Волков", email: "emp4.english@pulse.demo" },
   { label: "Учитель", name: "Мария Лебедева", email: "teacher@demo.pulse" },
   { label: "Маркетолог", name: "Сабина Ермекова", email: "marketer@demo.pulse" },
   { label: "Таргетолог", name: "Данияр Оспанов", email: "targetologist@demo.pulse" },

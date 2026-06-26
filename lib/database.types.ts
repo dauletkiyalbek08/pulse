@@ -493,6 +493,16 @@ export type Database = {
         Args: { p_project_id: string; p_user_id: string }
         Returns: string
       }
+      set_office: {
+        Args: {
+          p_project_id: string
+          p_lat: number
+          p_lng: number
+          p_radius: number
+          p_address: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
