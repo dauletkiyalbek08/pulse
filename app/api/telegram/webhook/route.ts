@@ -34,8 +34,8 @@ async function startShift(
   admin: Admin,
   projectId: string,
   userId: string,
-  lat: number,
-  lng: number,
+  lat: number | null,
+  lng: number | null,
 ) {
   const { data: project } = await admin
     .from("projects")
@@ -43,8 +43,14 @@ async function startShift(
     .eq("id", projectId)
     .maybeSingle();
 
+  // Гео-проверку делаем только если прислана локация И задан офис
   let distance: number | null = null;
-  if (project?.office_lat != null && project?.office_lng != null) {
+  if (
+    lat != null &&
+    lng != null &&
+    project?.office_lat != null &&
+    project?.office_lng != null
+  ) {
     distance = haversineMeters(Number(project.office_lat), Number(project.office_lng), lat, lng);
     if (distance > project.office_radius_m) {
       return { ok: false as const, distance, radius: project.office_radius_m };
@@ -127,7 +133,7 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     return;
   }
 
-  // Геолокация — начать смену
+  // Геолокация — начать смену с подтверждением офиса
   if (msg.location) {
     const res = await startShift(
       admin,
@@ -144,7 +150,21 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     } else if (res.already) {
       await sendMessage(chatId, "Вы уже на смене ✅");
     } else {
-      await sendMessage(chatId, "✅ Смена начата. Лиды будут приходить сюда по очереди.");
+      await sendMessage(chatId, "✅ Смена начата (вы в офисе). Лиды будут приходить по очереди.");
+    }
+    return;
+  }
+
+  // Начать смену без геолокации (для десктопа / когда офис не задан)
+  if (text === "🟢 Начать смену" || text === "/smena") {
+    const res = await startShift(admin, link.project_id, link.user_id, null, null);
+    if (res.already) {
+      await sendMessage(chatId, "Вы уже на смене ✅");
+    } else {
+      await sendMessage(
+        chatId,
+        "✅ Смена начата. Лиды будут приходить по очереди.\nЧтобы подтвердить, что вы в офисе, отправьте 📍 геолокацию с телефона.",
+      );
     }
     return;
   }
@@ -161,9 +181,11 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     return;
   }
 
-  await sendMessage(chatId, "Команды: «📍 Я на смене» (геолокация) и «🔚 Ушёл».", {
-    replyMarkup: shiftKeyboard(),
-  });
+  await sendMessage(
+    chatId,
+    "Кнопки: «🟢 Начать смену», «📍 Я в офисе (геолокация)» для подтверждения офиса и «🔚 Ушёл».",
+    { replyMarkup: shiftKeyboard() },
+  );
 }
 
 async function handleCallback(admin: Admin, cb: TgCallback) {

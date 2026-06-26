@@ -48,11 +48,12 @@ export function answerCallback(id: string, text?: string, alert = false) {
   });
 }
 
-/** Клавиатура смены: «Я на смене» (с геолокацией) + «Ушёл». */
+/** Клавиатура смены: начать смену (без гео) / подтвердить офис геолокацией / уйти. */
 export function shiftKeyboard() {
   return {
     keyboard: [
-      [{ text: "📍 Я на смене", request_location: true }],
+      [{ text: "🟢 Начать смену" }],
+      [{ text: "📍 Я в офисе (геолокация)", request_location: true }],
       [{ text: "🔚 Ушёл" }],
     ],
     resize_keyboard: true,
