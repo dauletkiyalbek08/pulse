@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/pill";
 import { NewEmployeeForm } from "@/components/new-employee-form";
 import { FireMemberForm } from "@/components/fire-member-form";
+import { TelegramConnect, type TgMember } from "@/components/telegram-connect";
 import { formatDate } from "@/lib/format";
 
 export default async function SettingsPage({
@@ -33,8 +34,21 @@ export default async function SettingsPage({
     : { data: [] };
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
 
+  const { data: tgLinks } = await supabase
+    .from("telegram_links")
+    .select("user_id")
+    .eq("project_id", projectId);
+  const linkedSet = new Set((tgLinks ?? []).map((t) => t.user_id));
+
   const active = rows.filter((m) => m.status === "active");
   const fired = rows.filter((m) => m.status === "fired");
+
+  const tgMembers: TgMember[] = active.map((m) => ({
+    userId: m.user_id,
+    name: nameById.get(m.user_id) ?? "—",
+    role: m.role,
+    linked: linkedSet.has(m.user_id),
+  }));
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
@@ -62,6 +76,22 @@ export default async function SettingsPage({
         </a>
         .
       </p>
+
+      {/* Telegram-бот */}
+      <section className="mb-8">
+        <h2 className="mb-1 text-base font-semibold text-ink">Telegram-бот</h2>
+        <p className="mb-4 text-sm text-muted">
+          Нажмите «Подключить» — сотрудник откроет ссылку в Telegram, привяжет
+          аккаунт и будет отмечать смену и получать лиды в боте.
+        </p>
+        {tgMembers.length === 0 ? (
+          <div className="rounded-card border border-dashed border-line bg-surface px-6 py-8 text-center text-sm text-muted">
+            Сначала добавьте сотрудников.
+          </div>
+        ) : (
+          <TelegramConnect projectId={projectId} members={tgMembers} />
+        )}
+      </section>
 
       {/* Активные сотрудники */}
       <section className="mb-8">

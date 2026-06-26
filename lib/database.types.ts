@@ -420,6 +420,54 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_links: {
+        Row: {
+          chat_id: number
+          id: string
+          linked_at: string
+          project_id: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          chat_id: number
+          id?: string
+          linked_at?: string
+          project_id: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          chat_id?: number
+          id?: string
+          linked_at?: string
+          project_id?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      telegram_link_codes: {
+        Row: {
+          code: string
+          created_at: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -440,6 +488,10 @@ export type Database = {
           p_end: string
         }
         Returns: undefined
+      }
+      gen_telegram_code: {
+        Args: { p_project_id: string; p_user_id: string }
+        Returns: string
       }
     }
     Enums: {

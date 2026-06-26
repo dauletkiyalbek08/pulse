@@ -61,6 +61,33 @@ export async function createEmployee(
   };
 }
 
+export interface TelegramLinkResult {
+  ok: boolean;
+  url?: string;
+  error?: string;
+}
+
+/** Генерирует одноразовую ссылку привязки Telegram для сотрудника. */
+export async function genTelegramLink(
+  projectId: string,
+  userId: string,
+): Promise<TelegramLinkResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Нет авторизации" };
+
+  const { data: code, error } = await supabase.rpc("gen_telegram_code", {
+    p_project_id: projectId,
+    p_user_id: userId,
+  });
+  if (error || !code) return { ok: false, error: "Нет прав или не удалось создать ссылку" };
+
+  const username = process.env.TELEGRAM_BOT_USERNAME ?? "";
+  return { ok: true, url: `https://t.me/${username}?start=${code}` };
+}
+
 export async function fireEmployee(
   projectId: string,
   formData: FormData,
