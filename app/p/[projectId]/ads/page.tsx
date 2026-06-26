@@ -62,14 +62,14 @@ export default async function AdsPage({
   const totalSpend = campaigns.reduce((s, c) => s + Number(c.spend), 0);
   const courseSpend = courseCampaigns.reduce((s, c) => s + Number(c.spend), 0);
   const vacancySpend = campaigns.filter((c) => c.objective === "vacancy").reduce((s, c) => s + Number(c.spend), 0);
-  // Цена за лид считается ТОЛЬКО по курсу (у вакансий лиды на WhatsApp-переписке, не в счёт)
+  // Все ключевые метрики считаем ТОЛЬКО по курсу (вакансии не учитываем)
   const courseLeads = courseCampaigns.reduce((s, c) => s + Number(c.leads), 0);
+  const courseImpr = courseCampaigns.reduce((s, c) => s + Number(c.impressions), 0);
+  const courseClicks = courseCampaigns.reduce((s, c) => s + Number(c.clicks), 0);
   const courseCpl = courseLeads > 0 ? courseSpend / courseLeads : 0;
-  const totalImpr = campaigns.reduce((s, c) => s + Number(c.impressions), 0);
-  const totalClicks = campaigns.reduce((s, c) => s + Number(c.clicks), 0);
-  const cpm = totalImpr > 0 ? (totalSpend / totalImpr) * 1000 : 0;
-  const cpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
-  const ctr = totalImpr > 0 ? (totalClicks / totalImpr) * 100 : 0;
+  const cpm = courseImpr > 0 ? (courseSpend / courseImpr) * 1000 : 0;
+  const cpc = courseClicks > 0 ? courseSpend / courseClicks : 0;
+  const ctr = courseImpr > 0 ? (courseClicks / courseImpr) * 100 : 0;
 
   const round2 = (v: number) => Math.round(v * 100) / 100;
   const campExport = campaigns.map((c) => [
@@ -106,9 +106,10 @@ export default async function AdsPage({
       </div>
 
       {campaigns.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2">
-          <Metric label="CPL · за лид (курс)" value={formatUsd(courseCpl, 2)} />
-          <Metric label="CPM · за 1000 показов" value={formatUsd(cpm, 2)} />
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-muted">Метрики по курсу:</span>
+          <Metric label="CPL · за лид" value={formatUsd(courseCpl, 2)} />
+          <Metric label="CPM · 1000 показов" value={formatUsd(cpm, 2)} />
           <Metric label="CPC · за клик" value={formatUsd(cpc, 2)} />
           <Metric label="CTR" value={formatPercent(ctr)} />
         </div>
