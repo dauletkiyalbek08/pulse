@@ -11,6 +11,14 @@ export default async function NewProjectPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Создавать проекты может только владелец платформы
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("global_role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.global_role !== "owner") redirect("/");
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-line bg-surface/80 backdrop-blur">

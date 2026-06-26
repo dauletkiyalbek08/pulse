@@ -6,22 +6,16 @@ import { Logo } from "@/components/logo";
 import { ProjectCard } from "@/components/project-card";
 import { CreateProjectCard } from "@/components/create-project-card";
 import { signOut } from "@/app/actions";
+import { roleLabel } from "@/lib/members";
 import type { Tables } from "@/lib/database.types";
 
 interface PortalViewProps {
   projects: Tables<"projects">[];
+  canCreate?: boolean;
   user: { name: string; role: string; email: string };
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  owner: "Владелец",
-  director: "Директор",
-  manager: "Менеджер",
-  hunter: "Хантер",
-  teacher: "Учитель",
-};
-
-export function PortalView({ projects, user }: PortalViewProps) {
+export function PortalView({ projects, canCreate = false, user }: PortalViewProps) {
   const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();
@@ -61,9 +55,7 @@ export function PortalView({ projects, user }: PortalViewProps) {
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <div className="text-sm font-semibold text-ink">{user.name}</div>
-              <div className="text-xs text-muted">
-                {ROLE_LABEL[user.role] ?? user.role}
-              </div>
+              <div className="text-xs text-muted">{roleLabel(user.role)}</div>
             </div>
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-ink">
               {initials}
@@ -94,7 +86,7 @@ export function PortalView({ projects, user }: PortalViewProps) {
           {filtered.map((project) => (
             <ProjectCard key={project.id} project={project} />
           ))}
-          {q === "" && <CreateProjectCard />}
+          {q === "" && canCreate && <CreateProjectCard />}
         </div>
 
         {q !== "" && filtered.length === 0 && (

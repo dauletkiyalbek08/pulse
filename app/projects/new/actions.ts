@@ -26,6 +26,16 @@ export async function createProject(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Создавать проекты может только владелец платформы
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("global_role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.global_role !== "owner") {
+    return { error: "Создавать проекты может только владелец платформы" };
+  }
+
   const template = NICHES[niche];
   const { data: project, error } = await supabase
     .from("projects")

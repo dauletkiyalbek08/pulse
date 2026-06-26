@@ -1,9 +1,7 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Logo } from "@/components/logo";
-import { getProjectIcon, getMenuIcon } from "@/components/icons";
+import { getProjectIcon } from "@/components/icons";
+import { SidebarNav } from "@/components/sidebar-nav";
 import type { MenuSection } from "@/lib/menu";
 
 interface SidebarProps {
@@ -23,8 +21,6 @@ export function Sidebar({
   icon,
   sections,
 }: SidebarProps) {
-  const pathname = usePathname();
-  const base = `/p/${projectId}`;
   const ProjectIcon = getProjectIcon(icon);
 
   return (
@@ -50,39 +46,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-        {sections.map((section) => (
-          <div key={section.title}>
-            <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">
-              {section.title}
-            </div>
-            <ul className="space-y-0.5">
-              {section.items.map((item) => {
-                const href = item.segment ? `${base}/${item.segment}` : base;
-                const active = item.segment
-                  ? pathname === href || pathname.startsWith(`${href}/`)
-                  : pathname === base;
-                const Icon = getMenuIcon(item.icon);
-                return (
-                  <li key={item.segment || "home"}>
-                    <Link
-                      href={href}
-                      className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
-                        active
-                          ? "bg-brand-soft font-medium text-brand-ink"
-                          : "text-muted hover:bg-canvas hover:text-ink"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </nav>
+      <SidebarNav projectId={projectId} sections={sections} />
     </aside>
   );
 }

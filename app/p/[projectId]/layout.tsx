@@ -50,6 +50,11 @@ export default async function ProjectLayout({
       <div className="flex min-h-screen flex-col lg:pl-[260px]">
         <ProjectTopbar
           projectName={project.name}
+          nicheLabel={niche.label}
+          accent={project.accent_color ?? "#10b981"}
+          icon={project.icon}
+          projectId={project.id}
+          sections={sections}
           user={{
             name: profile?.full_name ?? user.email ?? "",
             role: role ?? "director",

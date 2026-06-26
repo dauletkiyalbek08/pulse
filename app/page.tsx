@@ -21,9 +21,16 @@ export default async function Home() {
       .order("created_at", { ascending: true }),
   ]);
 
+  const isOwner = profile?.global_role === "owner";
+  const list = projects ?? [];
+
+  // Сотрудники (не владелец) попадают сразу в свой проект, минуя портал.
+  if (!isOwner && list.length === 1) redirect(`/p/${list[0].id}`);
+
   return (
     <PortalView
-      projects={projects ?? []}
+      projects={list}
+      canCreate={isOwner}
       user={{
         name: profile?.full_name ?? user.email ?? "",
         role: profile?.global_role ?? "director",
