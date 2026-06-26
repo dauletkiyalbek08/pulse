@@ -58,13 +58,15 @@ export default async function AdsPage({
   const courseStatus = statuses.find((s) => s.purpose === "course") ?? null;
   const vacancyStatus = statuses.find((s) => s.purpose === "vacancy") ?? null;
 
+  const courseCampaigns = campaigns.filter((c) => c.objective === "course");
   const totalSpend = campaigns.reduce((s, c) => s + Number(c.spend), 0);
-  const courseSpend = campaigns.filter((c) => c.objective === "course").reduce((s, c) => s + Number(c.spend), 0);
+  const courseSpend = courseCampaigns.reduce((s, c) => s + Number(c.spend), 0);
   const vacancySpend = campaigns.filter((c) => c.objective === "vacancy").reduce((s, c) => s + Number(c.spend), 0);
-  const totalLeads = campaigns.reduce((s, c) => s + Number(c.leads), 0);
+  // Цена за лид считается ТОЛЬКО по курсу (у вакансий лиды на WhatsApp-переписке, не в счёт)
+  const courseLeads = courseCampaigns.reduce((s, c) => s + Number(c.leads), 0);
+  const courseCpl = courseLeads > 0 ? courseSpend / courseLeads : 0;
   const totalImpr = campaigns.reduce((s, c) => s + Number(c.impressions), 0);
   const totalClicks = campaigns.reduce((s, c) => s + Number(c.clicks), 0);
-  const cpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
   const cpm = totalImpr > 0 ? (totalSpend / totalImpr) * 1000 : 0;
   const cpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
   const ctr = totalImpr > 0 ? (totalClicks / totalImpr) * 100 : 0;
@@ -96,8 +98,8 @@ export default async function AdsPage({
         <StatCard label="На курс" value={formatUsd(courseSpend)} icon={GraduationCap} tone="ink" />
         <StatCard label="На вакансии" value={formatUsd(vacancySpend)} icon={Briefcase} tone="ink" />
         <StatCard
-          label={`Лидов: ${formatNumber(totalLeads)} · цена`}
-          value={cpl > 0 ? formatUsd(cpl, 2) : "—"}
+          label={`Лиды курса: ${formatNumber(courseLeads)} · цена`}
+          value={courseCpl > 0 ? formatUsd(courseCpl, 2) : "—"}
           icon={Users}
           tone="ink"
         />
@@ -105,7 +107,7 @@ export default async function AdsPage({
 
       {campaigns.length > 0 && (
         <div className="mb-6 flex flex-wrap gap-2">
-          <Metric label="CPL · за лид" value={formatUsd(cpl, 2)} />
+          <Metric label="CPL · за лид (курс)" value={formatUsd(courseCpl, 2)} />
           <Metric label="CPM · за 1000 показов" value={formatUsd(cpm, 2)} />
           <Metric label="CPC · за клик" value={formatUsd(cpc, 2)} />
           <Metric label="CTR" value={formatPercent(ctr)} />
