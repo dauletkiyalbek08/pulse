@@ -5,19 +5,20 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptSecret } from "@/lib/crypto";
-import { fetchMetaCampaigns } from "@/lib/meta";
+import { fetchMetaEntities, type AdLevel } from "@/lib/meta";
 import type { CampaignRow } from "@/components/campaigns-table";
 
 export interface LiveAds {
   /** Есть ли хотя бы один подключённый кабинет. */
   connected: boolean;
-  /** Кампании за период (в нативной валюте кабинета, обычно USD). */
+  /** Сущности за период (в нативной валюте кабинета, обычно USD). */
   campaigns: (CampaignRow & { objective: string })[];
   errors: string[];
 }
 
 export async function getLiveAds(
   projectId: string,
+  level: AdLevel,
   since: string,
   until: string,
 ): Promise<LiveAds> {
@@ -38,7 +39,7 @@ export async function getLiveAds(
     const objective = ig.purpose === "vacancy" ? "vacancy" : "course";
     try {
       const token = decryptSecret(ig.token_enc);
-      const camps = await fetchMetaCampaigns(ig.ad_account_id, token, since, until);
+      const camps = await fetchMetaEntities(ig.ad_account_id, token, level, since, until);
       for (const c of camps) {
         campaigns.push({
           id: c.externalId || `${objective}-${c.name}`,

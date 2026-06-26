@@ -1,5 +1,5 @@
 import { campaignStatusMeta, objectiveLabel } from "@/lib/ads";
-import { formatUsd, formatNumber, formatPercent } from "@/lib/format";
+import { formatUsd, formatNumber } from "@/lib/format";
 
 export interface CampaignRow {
   id: string;
@@ -35,16 +35,19 @@ function StatusToggle({ status }: { status: string }) {
   );
 }
 
-const cpm = (spend: number, impressions: number) => (impressions > 0 ? (spend / impressions) * 1000 : null);
-const cpc = (spend: number, clicks: number) => (clicks > 0 ? spend / clicks : null);
-const ctr = (clicks: number, impressions: number) => (impressions > 0 ? (clicks / impressions) * 100 : 0);
 const cpl = (spend: number, leads: number) => (leads > 0 ? spend / leads : null);
 
-export function CampaignsTable({ rows }: { rows: CampaignRow[] }) {
+export function CampaignsTable({
+  rows,
+  entityLabel = "Кампания",
+}: {
+  rows: CampaignRow[];
+  entityLabel?: string;
+}) {
   if (rows.length === 0) {
     return (
       <div className="rounded-card border border-dashed border-line bg-surface px-6 py-12 text-center text-sm text-muted">
-        Кампании появятся после подключения и синхронизации Meta Ads.
+        Данных за выбранный период нет.
       </div>
     );
   }
@@ -53,37 +56,29 @@ export function CampaignsTable({ rows }: { rows: CampaignRow[] }) {
     (a, c) => ({
       spend: a.spend + Number(c.spend),
       impressions: a.impressions + Number(c.impressions),
-      clicks: a.clicks + Number(c.clicks),
-      reach: a.reach + Number(c.reach),
       leads: a.leads + Number(c.leads),
     }),
-    { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0 },
+    { spend: 0, impressions: 0, leads: 0 },
   );
 
-  const num = "whitespace-nowrap px-3 py-3 text-right tabular-nums";
-  const usd2 = (v: number | null) => (v != null ? formatUsd(v, 2) : "—");
+  const num = "whitespace-nowrap px-4 py-3 text-right tabular-nums";
 
   return (
     <div className="overflow-x-auto rounded-card bg-surface shadow-card ring-1 ring-line">
-      <table className="w-full min-w-[1080px] text-sm">
+      <table className="w-full min-w-[680px] text-sm">
         <thead>
           <tr className="border-b border-line bg-canvas/60 text-left text-xs font-medium uppercase tracking-wide text-faint">
-            <th className="px-3 py-3">Кампания</th>
-            <th className="px-3 py-3 text-right">Лиды</th>
-            <th className="px-3 py-3 text-right">CPL</th>
-            <th className="px-3 py-3 text-right">CPM</th>
-            <th className="px-3 py-3 text-right">CPC</th>
-            <th className="px-3 py-3 text-right">CTR</th>
-            <th className="px-3 py-3 text-right">Охват</th>
-            <th className="px-3 py-3 text-right">Показы</th>
-            <th className="px-3 py-3 text-right">Клики</th>
-            <th className="px-3 py-3 text-right">Потрачено</th>
+            <th className="px-4 py-3">{entityLabel}</th>
+            <th className="px-4 py-3 text-right">Лиды</th>
+            <th className="px-4 py-3 text-right">Цена за лид</th>
+            <th className="px-4 py-3 text-right">Потрачено</th>
+            <th className="px-4 py-3 text-right">Показы</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((c) => (
             <tr key={c.id} className="border-b border-line last:border-0 transition hover:bg-canvas">
-              <td className="px-3 py-3">
+              <td className="px-4 py-3">
                 <div className="flex flex-col gap-1">
                   <span className="font-medium text-ink">{c.name}</span>
                   <div className="flex items-center gap-2">
@@ -94,29 +89,19 @@ export function CampaignsTable({ rows }: { rows: CampaignRow[] }) {
                 </div>
               </td>
               <td className={`${num} font-semibold text-ink`}>{c.leads > 0 ? formatNumber(c.leads) : "—"}</td>
-              <td className={`${num} text-muted`}>{usd2(cpl(c.spend, c.leads))}</td>
-              <td className={`${num} text-muted`}>{usd2(cpm(c.spend, c.impressions))}</td>
-              <td className={`${num} text-muted`}>{usd2(cpc(c.spend, c.clicks))}</td>
-              <td className={`${num} text-muted`}>{formatPercent(ctr(c.clicks, c.impressions))}</td>
-              <td className={`${num} text-muted`}>{formatNumber(c.reach)}</td>
-              <td className={`${num} text-muted`}>{formatNumber(c.impressions)}</td>
-              <td className={`${num} text-muted`}>{formatNumber(c.clicks)}</td>
+              <td className={`${num} text-muted`}>{cpl(c.spend, c.leads) != null ? formatUsd(cpl(c.spend, c.leads)!, 2) : "—"}</td>
               <td className={`${num} font-semibold text-ink`}>{formatUsd(c.spend)}</td>
+              <td className={`${num} text-muted`}>{formatNumber(c.impressions)}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-line bg-canvas/60 font-semibold text-ink">
-            <td className="px-3 py-3">Итого · {formatNumber(rows.length)} кампаний</td>
+            <td className="px-4 py-3">Итого · {formatNumber(rows.length)}</td>
             <td className={num}>{formatNumber(t.leads)}</td>
-            <td className={num}>{usd2(cpl(t.spend, t.leads))}</td>
-            <td className={num}>{usd2(cpm(t.spend, t.impressions))}</td>
-            <td className={num}>{usd2(cpc(t.spend, t.clicks))}</td>
-            <td className={num}>{formatPercent(ctr(t.clicks, t.impressions))}</td>
-            <td className={num}>{formatNumber(t.reach)}</td>
-            <td className={num}>{formatNumber(t.impressions)}</td>
-            <td className={num}>{formatNumber(t.clicks)}</td>
+            <td className={num}>{cpl(t.spend, t.leads) != null ? formatUsd(cpl(t.spend, t.leads)!, 2) : "—"}</td>
             <td className={num}>{formatUsd(t.spend)}</td>
+            <td className={num}>{formatNumber(t.impressions)}</td>
           </tr>
         </tfoot>
       </table>

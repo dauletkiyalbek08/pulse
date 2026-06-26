@@ -125,15 +125,15 @@ export interface MetaCampaign {
   leads: number;
 }
 
-interface CampaignInsightRow {
-  campaign_id?: string;
-  campaign_name?: string;
-  objective?: string;
+export type AdLevel = "campaign" | "adset" | "ad";
+
+interface EntityInsightRow {
   spend?: string;
   impressions?: string;
   clicks?: string;
   reach?: string;
   actions?: { action_type: string; value: string }[];
+  [key: string]: unknown;
 }
 
 function mapStatus(effective?: string): string {
@@ -143,52 +143,56 @@ function mapStatus(effective?: string): string {
   return "archived";
 }
 
-/** Кампании кабинета с метриками за период (для раздела «Кампании»). */
-export async function fetchMetaCampaigns(
+/** Сущности кабинета (кампании / группы объявлений / объявления) за период. */
+export async function fetchMetaEntities(
   adAccountId: string,
   token: string,
+  level: AdLevel,
   since: string,
   until: string,
 ): Promise<MetaCampaign[]> {
   const id = accountNumber(adAccountId);
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+  const idField = `${level}_id`;
+  const nameField = `${level}_name`;
 
-  // Статусы кампаний (отдельный edge — insights их не отдаёт)
+  // Статусы (insights их не отдаёт) — отдельный edge
   const statusById = new Map<string, string>();
   try {
     const sres = await fetch(
-      `${GRAPH}/act_${id}/campaigns?fields=id,effective_status&limit=500&access_token=${encodeURIComponent(token)}`,
+      `${GRAPH}/act_${id}/${level}s?fields=id,effective_status&limit=500&access_token=${encodeURIComponent(token)}`,
       { next: { revalidate: 120 } },
     );
     const sjson = (await sres.json()) as { data?: { id: string; effective_status?: string }[] };
     for (const c of sjson.data ?? []) statusById.set(c.id, mapStatus(c.effective_status));
   } catch {
-    // статус не критичен — оставим 'active' по умолчанию
+    // статус не критичен
   }
 
   let url =
     `${GRAPH}/act_${id}/insights` +
-    `?level=campaign&fields=campaign_id,campaign_name,objective,spend,impressions,clicks,reach,actions` +
+    `?level=${level}&fields=${idField},${nameField},spend,impressions,clicks,reach,actions` +
     `&time_range=${timeRange}&limit=200&access_token=${encodeURIComponent(token)}`;
 
   const out: MetaCampaign[] = [];
   for (let page = 0; page < 50 && url; page++) {
     const res = await fetch(url, { next: { revalidate: 120 } });
     const json = (await res.json()) as {
-      data?: CampaignInsightRow[];
+      data?: EntityInsightRow[];
       paging?: { next?: string };
       error?: { message?: string };
     };
-    if (!res.ok || json.error) throw new Error(json.error?.message ?? "Ошибка запроса кампаний Meta");
+    if (!res.ok || json.error) throw new Error(json.error?.message ?? "Ошибка запроса данных Meta");
     for (const r of json.data ?? []) {
+      const extId = String(r[idField] ?? "");
       const leads = (r.actions ?? [])
         .filter((a) => LEAD_ACTION_TYPES.has(a.action_type))
         .reduce((s, a) => s + Number(a.value || 0), 0);
       out.push({
-        externalId: r.campaign_id ?? "",
-        name: r.campaign_name ?? "Кампания",
-        metaObjective: r.objective ?? "",
-        status: statusById.get(r.campaign_id ?? "") ?? "active",
+        externalId: extId,
+        name: String(r[nameField] ?? "—"),
+        metaObjective: "",
+        status: statusById.get(extId) ?? "active",
         spend: Number(r.spend || 0),
         impressions: Number(r.impressions || 0),
         clicks: Number(r.clicks || 0),
@@ -199,4 +203,14 @@ export async function fetchMetaCampaigns(
     url = json.paging?.next ?? "";
   }
   return out;
+}
+
+/** Кампании кабинета (обёртка над fetchMetaEntities). */
+export function fetchMetaCampaigns(
+  adAccountId: string,
+  token: string,
+  since: string,
+  until: string,
+): Promise<MetaCampaign[]> {
+  return fetchMetaEntities(adAccountId, token, "campaign", since, until);
 }

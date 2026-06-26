@@ -8,9 +8,17 @@ import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { ExportButton } from "@/components/export-button";
 import { CampaignsTable, type CampaignRow } from "@/components/campaigns-table";
+import { AdsTabs } from "@/components/ads-tabs";
 import { MetaIntegration } from "@/components/meta-integration";
 import { getMetaStatuses } from "@/app/p/[projectId]/ads/integration-actions";
 import { getLiveAds } from "@/lib/ads-live";
+import type { AdLevel } from "@/lib/meta";
+
+const LEVEL_LABEL: Record<AdLevel, string> = {
+  campaign: "Кампания",
+  adset: "Группа объявлений",
+  ad: "Объявление",
+};
 
 export default async function AdsPage({
   params,
@@ -21,15 +29,18 @@ export default async function AdsPage({
 }) {
   const { projectId } = await params;
   await requireAccess(projectId, "ads");
-  const range = rangeFromSearchParams(await searchParams);
+  const sp = await searchParams;
+  const range = rangeFromSearchParams(sp);
+  const levelParam = typeof sp.level === "string" ? sp.level : "campaign";
+  const level: AdLevel = levelParam === "adset" || levelParam === "ad" ? levelParam : "campaign";
 
   const supabase = await createClient();
 
-  // Подключённые кабинеты → тянем кампании живьём за выбранный период.
-  // Если ничего не подключено — показываем сохранённый демо-снимок.
+  // Подключённые кабинеты → тянем данные живьём за выбранный период и уровень.
+  // Если ничего не подключено — показываем сохранённый демо-снимок (кампании).
   const [statuses, live] = await Promise.all([
     getMetaStatuses(projectId),
-    getLiveAds(projectId, range.from, range.to),
+    getLiveAds(projectId, level, range.from, range.to),
   ]);
 
   let campaigns: CampaignRow[];
@@ -113,27 +124,26 @@ export default async function AdsPage({
         <MetaIntegration projectId={projectId} purpose="vacancy" title="Вакансии" status={vacancyStatus} />
       </div>
 
-      {/* Кампании (как в Ads Manager) */}
-      <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-ink">Кампании</h2>
-          <p className="text-xs text-muted">
-            {campaigns.length > 0
-              ? `${campaigns.length} кампаний · ${range.label}`
-              : live.connected
-                ? `За период «${range.label}» данных нет`
-                : "Подключите кабинет — данные подтянутся автоматически"}
-          </p>
-        </div>
+      {/* Уровни как в Ads Manager: кампании / группы / объявления */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <AdsTabs level={level} />
         {campaigns.length > 0 && (
           <ExportButton
-            filename={`kampanii-${projectId.slice(0, 8)}`}
-            headers={["Кампания", "Цель", "Статус", "Лиды", "CPL $", "CPM $", "CPC $", "CTR", "Охват", "Показы", "Клики", "Потрачено $"]}
+            filename={`${level}-${projectId.slice(0, 8)}`}
+            headers={["Название", "Цель", "Статус", "Лиды", "CPL $", "CPM $", "CPC $", "CTR", "Охват", "Показы", "Клики", "Потрачено $"]}
             rows={campExport}
           />
         )}
       </div>
-      <CampaignsTable rows={campaigns} />
+      <p className="mb-3 text-xs text-muted">
+        {campaigns.length > 0
+          ? `${campaigns.length} · ${range.label}`
+          : live.connected
+            ? `За период «${range.label}» данных нет`
+            : "Подключите кабинет — данные подтянутся автоматически"}
+        {level === "ad" && " · видно креативы и лиды по каждому"}
+      </p>
+      <CampaignsTable rows={campaigns} entityLabel={LEVEL_LABEL[level]} />
     </div>
   );
 }

@@ -55,7 +55,7 @@ export default async function FinancePage({
         .eq("project_id", projectId)
         .eq("period", period),
       supabase.from("projects").select("usd_rate").eq("id", projectId).maybeSingle(),
-      getLiveAds(projectId, range.from, range.to),
+      getLiveAds(projectId, "campaign", range.from, range.to),
     ]);
 
   const usdRate = Number(project?.usd_rate ?? 500);
