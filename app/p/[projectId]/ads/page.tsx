@@ -4,12 +4,13 @@ import { requireAccess } from "@/lib/queries";
 import { rangeFromSearchParams } from "@/lib/date-range";
 import { localDay } from "@/lib/attendance";
 import { channelShort, objectiveLabel } from "@/lib/ads";
-import { formatCurrency, formatNumber } from "@/lib/format";
+import { formatCurrency, formatNumber, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { ExportButton } from "@/components/export-button";
 import { AdSpendForm } from "@/components/ad-spend-form";
 import { AdSpendList, type AdRow } from "@/components/ad-spend-list";
+import { CampaignsTable, type CampaignRow } from "@/components/campaigns-table";
 import { MetaIntegration } from "@/components/meta-integration";
 import { getMetaStatus } from "@/app/p/[projectId]/ads/integration-actions";
 
@@ -34,6 +35,39 @@ export default async function AdsPage({
     .order("spent_on", { ascending: false });
 
   const metaStatus = await getMetaStatus(projectId);
+
+  const { data: campData } = await supabase
+    .from("ad_campaigns")
+    .select("id, name, objective, status, spend, impressions, clicks, reach, leads, period_from, period_to")
+    .eq("project_id", projectId)
+    .order("spend", { ascending: false });
+  const campaigns = (campData ?? []) as (CampaignRow & {
+    period_from: string | null;
+    period_to: string | null;
+  })[];
+  const campPeriod =
+    campaigns[0]?.period_from && campaigns[0]?.period_to
+      ? `${formatDate(campaigns[0].period_from)} – ${formatDate(campaigns[0].period_to)}`
+      : null;
+  const campTotals = campaigns.reduce(
+    (a, c) => ({
+      spend: a.spend + Number(c.spend),
+      leads: a.leads + Number(c.leads),
+    }),
+    { spend: 0, leads: 0 },
+  );
+  const campExport = campaigns.map((c) => [
+    c.name,
+    objectiveLabel(c.objective),
+    c.status,
+    c.impressions,
+    c.clicks,
+    c.impressions > 0 ? `${((c.clicks / c.impressions) * 100).toFixed(2)}%` : "—",
+    c.reach,
+    c.leads,
+    c.leads > 0 ? Math.round(c.spend / c.leads) : 0,
+    Math.round(c.spend),
+  ]);
 
   const rows = (data ?? []) as AdRow[];
   const total = rows.reduce((s, r) => s + Number(r.amount), 0);
@@ -94,6 +128,28 @@ export default async function AdsPage({
           rangeTo={range.to}
           rangeLabel={range.label}
         />
+      </div>
+
+      {/* Кампании (как в Ads Manager) */}
+      <div className="mb-8">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Кампании</h2>
+            <p className="text-xs text-muted">
+              {campaigns.length > 0
+                ? `${campaigns.length} кампаний${campPeriod ? ` · ${campPeriod}` : ""} · расход ${formatCurrency(campTotals.spend)} · лидов ${formatNumber(campTotals.leads)}`
+                : "Подключите Meta Ads и нажмите «Синхронизировать»"}
+            </p>
+          </div>
+          {campaigns.length > 0 && (
+            <ExportButton
+              filename={`kampanii-${projectId.slice(0, 8)}`}
+              headers={["Кампания", "Цель", "Статус", "Показы", "Клики", "CTR", "Охват", "Лиды", "Цена лида", "Расход"]}
+              rows={campExport}
+            />
+          )}
+        </div>
+        <CampaignsTable rows={campaigns} />
       </div>
 
       <div className="mb-6">

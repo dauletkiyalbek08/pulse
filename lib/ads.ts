@@ -30,3 +30,14 @@ export function channelShort(key: string): string {
 export function objectiveLabel(key: string): string {
   return OBJECTIVE_LABEL.get(key) ?? "Другое";
 }
+
+/** Статус кампании → подпись и тон Pill. */
+export const CAMPAIGN_STATUS: Record<string, { label: string; tone: "success" | "neutral" | "warning" }> = {
+  active: { label: "Активна", tone: "success" },
+  paused: { label: "Пауза", tone: "neutral" },
+  archived: { label: "Архив", tone: "warning" },
+};
+
+export function campaignStatusMeta(status: string) {
+  return CAMPAIGN_STATUS[status] ?? CAMPAIGN_STATUS.paused;
+}

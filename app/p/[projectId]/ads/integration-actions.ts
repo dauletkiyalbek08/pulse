@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveRole } from "@/lib/queries";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
-import { verifyMetaAccount, fetchMetaInsights, guessObjective } from "@/lib/meta";
+import { verifyMetaAccount, fetchMetaInsights, fetchMetaCampaigns, guessObjective } from "@/lib/meta";
 
 const MANAGE_ROLES = ["owner", "director", "marketer", "targetologist"];
 
@@ -174,6 +174,35 @@ export async function syncMeta(
   if (inserts.length > 0) {
     const { error } = await admin.from("ad_spend").insert(inserts);
     if (error) return { ok: false, error: "Не удалось записать расходы" };
+  }
+
+  // Обновляем снимок кампаний (раздел «Кампании») — best-effort, без срыва синка
+  try {
+    const token = decryptSecret(integ.token_enc);
+    const camps = await fetchMetaCampaigns(integ.ad_account_id, token, since, until);
+    await admin.from("ad_campaigns").delete().eq("project_id", projectId).eq("channel", "meta");
+    if (camps.length > 0) {
+      await admin.from("ad_campaigns").insert(
+        camps.map((c) => ({
+          project_id: projectId,
+          channel: "meta",
+          external_id: c.externalId,
+          name: c.name,
+          objective: guessObjective(c.name),
+          meta_objective: c.metaObjective,
+          status: c.status,
+          spend: Math.round(c.spend * rate),
+          impressions: c.impressions,
+          clicks: c.clicks,
+          reach: c.reach,
+          leads: c.leads,
+          period_from: since,
+          period_to: until,
+        })),
+      );
+    }
+  } catch {
+    // снимок кампаний не критичен для синхронизации расходов
   }
 
   await admin

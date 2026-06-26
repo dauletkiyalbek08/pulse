@@ -123,6 +123,63 @@ export type Database = {
         }
         Relationships: []
       }
+      ad_campaigns: {
+        Row: {
+          channel: string
+          clicks: number
+          external_id: string | null
+          id: string
+          impressions: number
+          leads: number
+          meta_objective: string | null
+          name: string
+          objective: string
+          period_from: string | null
+          period_to: string | null
+          project_id: string
+          reach: number
+          spend: number
+          status: string
+          synced_at: string
+        }
+        Insert: {
+          channel?: string
+          clicks?: number
+          external_id?: string | null
+          id?: string
+          impressions?: number
+          leads?: number
+          meta_objective?: string | null
+          name: string
+          objective?: string
+          period_from?: string | null
+          period_to?: string | null
+          project_id: string
+          reach?: number
+          spend?: number
+          status?: string
+          synced_at?: string
+        }
+        Update: {
+          channel?: string
+          clicks?: number
+          external_id?: string | null
+          id?: string
+          impressions?: number
+          leads?: number
+          meta_objective?: string | null
+          name?: string
+          objective?: string
+          period_from?: string | null
+          period_to?: string | null
+          project_id?: string
+          reach?: number
+          spend?: number
+          status?: string
+          synced_at?: string
+        }
+        Relationships: []
+      }
       meta_integration: {
         Row: {
           ad_account_id: string

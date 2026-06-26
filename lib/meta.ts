@@ -112,3 +112,91 @@ export async function fetchMetaInsights(
 export function guessObjective(campaign: string): "course" | "vacancy" {
   return /вакан|ваканс|hr|job|рекрут|hiring|резюме|сотрудн/i.test(campaign) ? "vacancy" : "course";
 }
+
+export interface MetaCampaign {
+  externalId: string;
+  name: string;
+  metaObjective: string;
+  status: string; // active | paused | archived
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+  leads: number;
+}
+
+interface CampaignInsightRow {
+  campaign_id?: string;
+  campaign_name?: string;
+  objective?: string;
+  spend?: string;
+  impressions?: string;
+  clicks?: string;
+  reach?: string;
+  actions?: { action_type: string; value: string }[];
+}
+
+function mapStatus(effective?: string): string {
+  if (effective === "ACTIVE") return "active";
+  if (effective === "PAUSED" || effective === "CAMPAIGN_PAUSED" || effective === "ADSET_PAUSED")
+    return "paused";
+  return "archived";
+}
+
+/** Кампании кабинета с метриками за период (для раздела «Кампании»). */
+export async function fetchMetaCampaigns(
+  adAccountId: string,
+  token: string,
+  since: string,
+  until: string,
+): Promise<MetaCampaign[]> {
+  const id = accountNumber(adAccountId);
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  // Статусы кампаний (отдельный edge — insights их не отдаёт)
+  const statusById = new Map<string, string>();
+  try {
+    const sres = await fetch(
+      `${GRAPH}/act_${id}/campaigns?fields=id,effective_status&limit=500&access_token=${encodeURIComponent(token)}`,
+      { cache: "no-store" },
+    );
+    const sjson = (await sres.json()) as { data?: { id: string; effective_status?: string }[] };
+    for (const c of sjson.data ?? []) statusById.set(c.id, mapStatus(c.effective_status));
+  } catch {
+    // статус не критичен — оставим 'active' по умолчанию
+  }
+
+  let url =
+    `${GRAPH}/act_${id}/insights` +
+    `?level=campaign&fields=campaign_id,campaign_name,objective,spend,impressions,clicks,reach,actions` +
+    `&time_range=${timeRange}&limit=200&access_token=${encodeURIComponent(token)}`;
+
+  const out: MetaCampaign[] = [];
+  for (let page = 0; page < 50 && url; page++) {
+    const res = await fetch(url, { cache: "no-store" });
+    const json = (await res.json()) as {
+      data?: CampaignInsightRow[];
+      paging?: { next?: string };
+      error?: { message?: string };
+    };
+    if (!res.ok || json.error) throw new Error(json.error?.message ?? "Ошибка запроса кампаний Meta");
+    for (const r of json.data ?? []) {
+      const leads = (r.actions ?? [])
+        .filter((a) => LEAD_ACTION_TYPES.has(a.action_type))
+        .reduce((s, a) => s + Number(a.value || 0), 0);
+      out.push({
+        externalId: r.campaign_id ?? "",
+        name: r.campaign_name ?? "Кампания",
+        metaObjective: r.objective ?? "",
+        status: statusById.get(r.campaign_id ?? "") ?? "active",
+        spend: Number(r.spend || 0),
+        impressions: Number(r.impressions || 0),
+        clicks: Number(r.clicks || 0),
+        reach: Number(r.reach || 0),
+        leads: Math.round(leads),
+      });
+    }
+    url = json.paging?.next ?? "";
+  }
+  return out;
+}
