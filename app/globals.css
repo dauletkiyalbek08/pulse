@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Pulse — дизайн-токены (светлый минимализм, зелёный акцент)
+   Tailwind v4: токены в @theme сразу дают утилиты bg-*, text-*,
+   border-*, ring-* и т.д.
+   ============================================================ */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+
+  /* Поверхности и текст */
+  --color-canvas: #f5f6f8; /* фон приложения */
+  --color-surface: #ffffff; /* карточки, панели */
+  --color-ink: #0f172a; /* основной текст */
+  --color-muted: #64748b; /* вторичный текст */
+  --color-faint: #94a3b8; /* подписи, плейсхолдеры */
+  --color-line: #e9ecf1; /* границы */
+
+  /* Акцент — зелёный */
+  --color-brand: #10b981;
+  --color-brand-strong: #059669;
+  --color-brand-soft: #ecfdf5;
+  --color-brand-ink: #047857;
+
+  /* Статусы */
+  --color-status-active: #10b981;
+  --color-status-active-soft: #ecfdf5;
+  --color-status-paused: #f59e0b;
+  --color-status-paused-soft: #fffbeb;
+  --color-status-done: #94a3b8;
+  --color-status-done-soft: #f1f5f9;
+
+  /* Скругления (≈16px по ТЗ) */
+  --radius-card: 1.25rem; /* 20px */
+  --radius-tile: 0.875rem; /* 14px */
+
+  /* Мягкие тени */
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px rgba(15, 23, 42, 0.05);
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Аккуратный фокус для доступности */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
