@@ -15,6 +15,8 @@ import { MetricCard } from "@/components/metric-card";
 import { RevenueChart } from "@/components/revenue-chart";
 import { FunnelCard } from "@/components/funnel-card";
 import { TopList } from "@/components/top-list";
+import { DateRangePicker } from "@/components/date-range-picker";
+import type { DateRange } from "@/lib/date-range";
 
 const QUALIFYING_STATUSES = ["qualified", "trial", "sale"];
 
@@ -29,9 +31,11 @@ function pluralLeads(n: number): string {
 export async function DashboardEducation({
   projectId,
   projectName,
+  range,
 }: {
   projectId: string;
   projectName: string;
+  range: DateRange;
 }) {
   const supabase = await createClient();
 
@@ -41,6 +45,8 @@ export async function DashboardEducation({
         .from("metrics_daily")
         .select("*")
         .eq("project_id", projectId)
+        .gte("date", range.from)
+        .lte("date", range.to)
         .order("date", { ascending: true }),
       supabase
         .from("project_members")
@@ -102,11 +108,17 @@ export async function DashboardEducation({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">{projectName}</h1>
-        <p className="mt-1 text-sm text-muted">
-          Сводка за последние {rows.length} дней
-        </p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">{projectName}</h1>
+          <p className="mt-1 text-sm text-muted">Период: {range.label}</p>
+        </div>
+        <DateRangePicker
+          preset={range.preset}
+          from={range.from}
+          to={range.to}
+          label={range.label}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -244,6 +244,7 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          customer_id: string | null
           id: string
           lead_id: string | null
           manager_id: string | null
@@ -253,6 +254,7 @@ export type Database = {
         Insert: {
           amount?: number
           created_at?: string
+          customer_id?: string | null
           id?: string
           lead_id?: string | null
           manager_id?: string | null
@@ -262,11 +264,78 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          customer_id?: string | null
           id?: string
           lead_id?: string | null
           manager_id?: string | null
           product?: string | null
           project_id?: string
+        }
+        Relationships: []
+      }
+      customers: {
+        Row: {
+          created_at: string
+          first_purchase_at: string | null
+          full_name: string
+          id: string
+          phone: string | null
+          project_id: string
+          total_spent: number
+        }
+        Insert: {
+          created_at?: string
+          first_purchase_at?: string | null
+          full_name: string
+          id?: string
+          phone?: string | null
+          project_id: string
+          total_spent?: number
+        }
+        Update: {
+          created_at?: string
+          first_purchase_at?: string | null
+          full_name?: string
+          id?: string
+          phone?: string | null
+          project_id?: string
+          total_spent?: number
+        }
+        Relationships: []
+      }
+      trials: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          full_name: string
+          id: string
+          lead_id: string | null
+          phone: string | null
+          project_id: string
+          scheduled_at: string | null
+          status: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          full_name: string
+          id?: string
+          lead_id?: string | null
+          phone?: string | null
+          project_id: string
+          scheduled_at?: string | null
+          status?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          lead_id?: string | null
+          phone?: string | null
+          project_id?: string
+          scheduled_at?: string | null
+          status?: string
         }
         Relationships: []
       }

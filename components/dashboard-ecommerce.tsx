@@ -21,13 +21,17 @@ import { MetricCard } from "@/components/metric-card";
 import { RevenueChart } from "@/components/revenue-chart";
 import { FunnelCard } from "@/components/funnel-card";
 import { TopList } from "@/components/top-list";
+import { DateRangePicker } from "@/components/date-range-picker";
+import type { DateRange } from "@/lib/date-range";
 
 export async function DashboardEcommerce({
   projectId,
   projectName,
+  range,
 }: {
   projectId: string;
   projectName: string;
+  range: DateRange;
 }) {
   const supabase = await createClient();
 
@@ -41,6 +45,8 @@ export async function DashboardEcommerce({
       .from("metrics_daily")
       .select("*")
       .eq("project_id", projectId)
+      .gte("date", range.from)
+      .lte("date", range.to)
       .order("date", { ascending: true }),
     supabase
       .from("project_members")
@@ -56,7 +62,14 @@ export async function DashboardEcommerce({
 
   const rows = metrics ?? [];
   const agg = aggregateMetrics(rows);
-  const newToday = rows.length ? rows[rows.length - 1].leads : 0;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const { data: todayRow } = await supabase
+    .from("metrics_daily")
+    .select("leads")
+    .eq("project_id", projectId)
+    .eq("date", todayStr)
+    .maybeSingle();
+  const newToday = todayRow?.leads ?? 0;
   const chartData = rows.map((r) => ({
     date: r.date,
     revenue: Number(r.revenue),
@@ -102,11 +115,17 @@ export async function DashboardEcommerce({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">{projectName}</h1>
-        <p className="mt-1 text-sm text-muted">
-          Сводка за последние {rows.length} дней
-        </p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">{projectName}</h1>
+          <p className="mt-1 text-sm text-muted">Период: {range.label}</p>
+        </div>
+        <DateRangePicker
+          preset={range.preset}
+          from={range.from}
+          to={range.to}
+          label={range.label}
+        />
       </div>
 
       {/* Живая сводка дня (заглушка AI-подсказки) */}

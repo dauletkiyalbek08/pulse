@@ -32,10 +32,20 @@ export function leadStatusOrder(niche: Niche): string[] {
 }
 
 const SOURCE_LABEL: Record<string, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
   meta: "Meta",
   tiktok: "TikTok",
   other: "Другое",
 };
+
+/** Источники для формы добавления лида (MODULES.md §2.1). */
+export const LEAD_SOURCES: { value: string; label: string }[] = [
+  { value: "instagram", label: "Instagram" },
+  { value: "facebook", label: "Facebook" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "other", label: "Другое" },
+];
 
 export function sourceLabel(source: string | null): string {
   if (!source) return "—";
