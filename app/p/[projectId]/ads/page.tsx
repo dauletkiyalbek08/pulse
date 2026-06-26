@@ -10,7 +10,8 @@ import { ExportButton } from "@/components/export-button";
 import { CampaignsTable, type CampaignRow } from "@/components/campaigns-table";
 import { AdsTabs } from "@/components/ads-tabs";
 import { MetaIntegration } from "@/components/meta-integration";
-import { getMetaStatuses } from "@/app/p/[projectId]/ads/integration-actions";
+import { LeadAdsSetup } from "@/components/lead-ads-setup";
+import { getMetaStatuses, getLeadPages } from "@/app/p/[projectId]/ads/integration-actions";
 import { getLiveAds } from "@/lib/ads-live";
 import type { AdLevel } from "@/lib/meta";
 
@@ -38,9 +39,10 @@ export default async function AdsPage({
 
   // Подключённые кабинеты → тянем данные живьём за выбранный период и уровень.
   // Если ничего не подключено — показываем сохранённый демо-снимок (кампании).
-  const [statuses, live] = await Promise.all([
+  const [statuses, live, leadPages] = await Promise.all([
     getMetaStatuses(projectId),
     getLiveAds(projectId, level, range.from, range.to),
+    getLeadPages(projectId),
   ]);
 
   let campaigns: CampaignRow[];
@@ -125,6 +127,16 @@ export default async function AdsPage({
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <MetaIntegration projectId={projectId} purpose="course" title="Курс" status={courseStatus} />
         <MetaIntegration projectId={projectId} purpose="vacancy" title="Вакансии" status={vacancyStatus} />
+      </div>
+
+      <div className="mb-8">
+        <LeadAdsSetup
+          projectId={projectId}
+          webhookUrl="https://pulse-drab-chi.vercel.app/api/meta/leads"
+          verifyToken={process.env.META_VERIFY_TOKEN ?? ""}
+          pages={leadPages}
+          connected={statuses.length > 0}
+        />
       </div>
 
       {/* Уровни как в Ads Manager: кампании / группы / объявления */}

@@ -226,3 +226,61 @@ export function fetchMetaCampaigns(
 ): Promise<MetaCampaign[]> {
   return fetchMetaEntities(adAccountId, token, "campaign", since, until);
 }
+
+/* ───────────────────────── Lead Ads (формы) ───────────────────────── */
+
+export interface MetaPage {
+  id: string;
+  name: string;
+}
+
+/** Facebook-страницы, доступные токену (для подписки на лид-формы). */
+export async function fetchPages(token: string): Promise<MetaPage[]> {
+  const res = await fetch(
+    `${GRAPH}/me/accounts?fields=id,name&limit=200&access_token=${encodeURIComponent(token)}`,
+    { cache: "no-store" },
+  );
+  const json = (await res.json()) as GraphError & { data?: { id: string; name?: string }[] };
+  if (!res.ok || json.error) throw new Error(json.error?.message ?? "Не удалось получить страницы");
+  return (json.data ?? []).map((p) => ({ id: p.id, name: p.name ?? p.id }));
+}
+
+export interface MetaLead {
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  adId: string | null;
+  adsetId: string | null;
+  campaignId: string | null;
+  formId: string | null;
+}
+
+/** Детали заявки с формы по leadgen_id (нужен токен с правом leads_retrieval). */
+export async function fetchLead(leadgenId: string, token: string): Promise<MetaLead> {
+  const res = await fetch(
+    `${GRAPH}/${leadgenId}?fields=field_data,ad_id,adset_id,campaign_id,form_id&access_token=${encodeURIComponent(token)}`,
+    { cache: "no-store" },
+  );
+  const json = (await res.json()) as GraphError & {
+    field_data?: { name: string; values: string[] }[];
+    ad_id?: string;
+    adset_id?: string;
+    campaign_id?: string;
+    form_id?: string;
+  };
+  if (!res.ok || json.error) throw new Error(json.error?.message ?? "Не удалось получить заявку");
+
+  const fields = json.field_data ?? [];
+  const pick = (re: RegExp) =>
+    fields.find((f) => re.test(f.name))?.values?.[0] ?? null;
+
+  return {
+    fullName: pick(/name|имя|аты|фио/i) ?? "Без имени",
+    phone: pick(/phone|tel|телефон|номер|нөмер/i),
+    email: pick(/email|почта|mail/i),
+    adId: json.ad_id ?? null,
+    adsetId: json.adset_id ?? null,
+    campaignId: json.campaign_id ?? null,
+    formId: json.form_id ?? null,
+  };
+}

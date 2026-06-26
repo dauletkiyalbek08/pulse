@@ -228,6 +228,27 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_pages: {
+        Row: {
+          created_at: string
+          name: string | null
+          page_id: string
+          project_id: string
+        }
+        Insert: {
+          created_at?: string
+          name?: string | null
+          page_id: string
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          name?: string | null
+          page_id?: string
+          project_id?: string
+        }
+        Relationships: []
+      }
       payroll: {
         Row: {
           base_salary: number
@@ -285,9 +306,14 @@ export type Database = {
       leads: {
         Row: {
           accepted_at: string | null
+          ad_id: string | null
+          adset_id: string | null
           assigned_at: string | null
           assigned_to: string | null
+          campaign_id: string | null
           created_at: string
+          external_id: string | null
+          form_id: string | null
           full_name: string
           id: string
           phone: string | null
@@ -298,9 +324,14 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          ad_id?: string | null
+          adset_id?: string | null
           assigned_at?: string | null
           assigned_to?: string | null
+          campaign_id?: string | null
           created_at?: string
+          external_id?: string | null
+          form_id?: string | null
           full_name: string
           id?: string
           phone?: string | null
@@ -311,9 +342,14 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          ad_id?: string | null
+          adset_id?: string | null
           assigned_at?: string | null
           assigned_to?: string | null
+          campaign_id?: string | null
           created_at?: string
+          external_id?: string | null
+          form_id?: string | null
           full_name?: string
           id?: string
           phone?: string | null

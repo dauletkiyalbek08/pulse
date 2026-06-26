@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveRole } from "@/lib/queries";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
-import { verifyMetaAccount, fetchMetaInsights, fetchMetaCampaigns } from "@/lib/meta";
+import { verifyMetaAccount, fetchMetaInsights, fetchMetaCampaigns, fetchPages } from "@/lib/meta";
 
 const MANAGE_ROLES = ["owner", "director", "marketer", "targetologist"];
 
@@ -119,6 +119,61 @@ export async function disconnectMeta(
     .eq("purpose", purposeOf(purpose));
   revalidatePath(`/p/${projectId}/ads`);
   return { ok: true };
+}
+
+/* ───────────────────────── Lead Ads (формы) ───────────────────────── */
+
+export interface LeadPage {
+  pageId: string;
+  name: string;
+}
+
+/** Список привязанных Facebook-страниц проекта (для Lead Ads). */
+export async function getLeadPages(projectId: string): Promise<LeadPage[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("meta_pages")
+    .select("page_id, name")
+    .eq("project_id", projectId);
+  return (data ?? []).map((p) => ({ pageId: p.page_id, name: p.name ?? p.page_id }));
+}
+
+export interface LinkPagesResult {
+  ok: boolean;
+  error?: string;
+  count?: number;
+}
+
+/** Загрузить и привязать к проекту страницы, доступные подключённому кабинету. */
+export async function linkLeadPages(projectId: string): Promise<LinkPagesResult> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+
+  const admin = createAdminClient();
+  const { data: integ } = await admin
+    .from("meta_integration")
+    .select("purpose, token_enc")
+    .eq("project_id", projectId);
+  if (!integ || integ.length === 0) return { ok: false, error: "Сначала подключите кабинет Meta" };
+
+  const row = integ.find((r) => r.purpose === "course") ?? integ[0];
+  let pages;
+  try {
+    pages = await fetchPages(decryptSecret(row.token_enc));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Не удалось получить страницы (нужны права pages_show_list)" };
+  }
+  if (pages.length === 0) return { ok: false, error: "У токена нет доступных страниц" };
+
+  const { error } = await admin
+    .from("meta_pages")
+    .upsert(
+      pages.map((p) => ({ page_id: p.id, project_id: projectId, name: p.name })),
+      { onConflict: "page_id" },
+    );
+  if (error) return { ok: false, error: "Не удалось сохранить страницы" };
+
+  revalidatePath(`/p/${projectId}/ads`);
+  return { ok: true, count: pages.length };
 }
 
 export interface SyncResult {
