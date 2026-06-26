@@ -119,9 +119,10 @@ export async function fetchMetaInsights(
   return rows;
 }
 
-/** Эвристика цели кампании по названию: вакансии vs курс. */
+/** Эвристика цели кампании по названию: вакансии vs курс.
+ * `va+c` ловит и «vac», и растянутые «vaaaac»/«vaaac» (так владелец называет вакансии). */
 export function guessObjective(campaign: string): "course" | "vacancy" {
-  return /вакан|vac|vacancy|hr|job|рекрут|hiring|резюме|сотрудн/i.test(campaign)
+  return /вакан|va+c|vacancy|hr|job|рекрут|hiring|резюме|сотрудн/i.test(campaign)
     ? "vacancy"
     : "course";
 }
