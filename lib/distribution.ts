@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { localDay } from "@/lib/attendance";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
 /**
- * Round-robin раздача лидов: возвращает user_id следующего хантера,
- * который СЕЙЧАС НА СМЕНЕ (открытая смена) и которому дольше всех не назначали лид.
- * Если на смене нет ни одного хантера — возвращает null (лид остаётся свободным).
+ * Равная раздача лидов между хантерами НА СМЕНЕ: лид идёт тому, у кого СЕГОДНЯ
+ * назначено меньше всего лидов. Так нагрузка делится поровну (20 на 2 → 10/10;
+ * на 3 → 7/7/6). Если на смене нет хантеров — null (лид остаётся свободным).
  */
 export async function pickNextHunter(
   supabase: Client,
@@ -33,28 +34,29 @@ export async function pickNextHunter(
   if (onShift.length === 0) return null;
   if (onShift.length === 1) return onShift[0];
 
-  // Время последнего назначенного лида у каждого хантера на смене (null = никогда)
-  const { data: recent } = await supabase
+  // Детерминированный порядок для разрыва ничьих (чёткое чередование)
+  onShift.sort();
+
+  // Сколько лидов СЕГОДНЯ уже назначено каждому хантеру на смене
+  const sinceISO = `${localDay()}T00:00:00+05:00`; // начало суток (Алматы, UTC+5)
+  const { data: todays } = await supabase
     .from("leads")
-    .select("assigned_to, created_at")
+    .select("assigned_to")
     .eq("project_id", projectId)
     .in("assigned_to", onShift)
-    .order("created_at", { ascending: false });
+    .gte("created_at", sinceISO);
 
-  const lastAt = new Map<string, string>();
-  for (const r of recent ?? []) {
-    if (r.assigned_to && !lastAt.has(r.assigned_to)) lastAt.set(r.assigned_to, r.created_at);
+  const count = new Map(onShift.map((id) => [id, 0]));
+  for (const l of todays ?? []) {
+    if (l.assigned_to && count.has(l.assigned_to)) {
+      count.set(l.assigned_to, (count.get(l.assigned_to) ?? 0) + 1);
+    }
   }
 
-  // Никогда не получавшие — в начало очереди; затем по самой старой дате назначения
-  onShift.sort((a, b) => {
-    const ta = lastAt.get(a);
-    const tb = lastAt.get(b);
-    if (!ta && !tb) return 0;
-    if (!ta) return -1;
-    if (!tb) return 1;
-    return ta.localeCompare(tb);
-  });
-
-  return onShift[0];
+  // Хантер с минимальным числом лидов сегодня (ничья — по порядку onShift)
+  let best = onShift[0];
+  for (const id of onShift) {
+    if ((count.get(id) ?? 0) < (count.get(best) ?? 0)) best = id;
+  }
+  return best;
 }
