@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { signOut } from "@/app/actions";
+import { Avatar } from "@/components/avatar";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Владелец",
@@ -16,15 +17,6 @@ interface ProjectTopbarProps {
 }
 
 export function ProjectTopbar({ projectName, user }: ProjectTopbarProps) {
-  const initials =
-    user.name
-      .split(" ")
-      .map((s) => s[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() || "—";
-
   return (
     <header className="sticky top-0 z-10 border-b border-line bg-surface/80 backdrop-blur">
       <div className="flex items-center gap-4 px-6 py-3">
@@ -50,9 +42,7 @@ export function ProjectTopbar({ projectName, user }: ProjectTopbarProps) {
               {ROLE_LABEL[user.role] ?? user.role}
             </div>
           </div>
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-ink">
-            {initials}
-          </span>
+          <Avatar name={user.name} />
           <form action={signOut}>
             <button
               type="submit"
