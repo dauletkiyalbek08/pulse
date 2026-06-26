@@ -41,6 +41,8 @@ export type Database = {
       }
       leads: {
         Row: {
+          accepted_at: string | null
+          assigned_at: string | null
           assigned_to: string | null
           created_at: string
           full_name: string
@@ -52,6 +54,8 @@ export type Database = {
           value: number | null
         }
         Insert: {
+          accepted_at?: string | null
+          assigned_at?: string | null
           assigned_to?: string | null
           created_at?: string
           full_name: string
@@ -63,6 +67,8 @@ export type Database = {
           value?: number | null
         }
         Update: {
+          accepted_at?: string | null
+          assigned_at?: string | null
           assigned_to?: string | null
           created_at?: string
           full_name?: string

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { pickNextHunter } from "@/lib/distribution";
-import { sendMessage, leadCard, leadButtons } from "@/lib/telegram";
+import { notifyHunter } from "@/lib/lead-dispatch";
 
 export interface NewLeadState {
   error: string | null;
@@ -30,7 +30,7 @@ export async function createLead(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Round-robin: лид падает следующему хантеру на смене (или остаётся свободным)
+  // Равная раздача: лид падает хантеру на смене (или остаётся свободным)
   const assignedTo = await pickNextHunter(supabase, projectId);
 
   const { data: lead, error } = await supabase
@@ -43,6 +43,7 @@ export async function createLead(
       status: "new",
       value: Number.isFinite(value) ? value : 0,
       assigned_to: assignedTo,
+      assigned_at: assignedTo ? new Date().toISOString() : null,
     })
     .select("id")
     .single();
@@ -53,17 +54,12 @@ export async function createLead(
 
   // Уведомление хантеру в Telegram (если привязан)
   if (assignedTo) {
-    const { data: tg } = await supabase
-      .from("telegram_links")
-      .select("chat_id")
-      .eq("project_id", projectId)
-      .eq("user_id", assignedTo)
-      .maybeSingle();
-    if (tg?.chat_id) {
-      await sendMessage(tg.chat_id, leadCard({ full_name: fullName, phone: phone || null, source }), {
-        buttons: leadButtons(lead.id),
-      });
-    }
+    await notifyHunter(supabase, projectId, assignedTo, {
+      id: lead.id,
+      full_name: fullName,
+      phone: phone || null,
+      source,
+    });
   }
 
   revalidatePath(`/p/${projectId}/leads`);

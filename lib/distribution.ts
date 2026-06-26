@@ -11,6 +11,7 @@ type Client = Awaited<ReturnType<typeof createClient>>;
 export async function pickNextHunter(
   supabase: Client,
   projectId: string,
+  excludeUserId?: string,
 ): Promise<string | null> {
   const [{ data: hunters }, { data: openShifts }] = await Promise.all([
     supabase
@@ -27,8 +28,8 @@ export async function pickNextHunter(
   ]);
 
   const hunterIds = new Set((hunters ?? []).map((h) => h.user_id));
-  const onShift = [...new Set((openShifts ?? []).map((s) => s.user_id))].filter((id) =>
-    hunterIds.has(id),
+  const onShift = [...new Set((openShifts ?? []).map((s) => s.user_id))].filter(
+    (id) => hunterIds.has(id) && id !== excludeUserId,
   );
 
   if (onShift.length === 0) return null;

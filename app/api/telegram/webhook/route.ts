@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineMeters } from "@/lib/geo";
+import { reassignLead } from "@/lib/lead-dispatch";
 import {
   sendMessage,
   answerCallback,
@@ -11,6 +12,26 @@ import {
 } from "@/lib/telegram";
 
 type Admin = ReturnType<typeof createAdminClient>;
+
+async function closeShift(admin: Admin, projectId: string, userId: string) {
+  await admin
+    .from("shifts")
+    .update({ ended_at: new Date().toISOString(), status: "closed" })
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .eq("status", "open");
+}
+
+/** Непринятые (assigned, но не accepted) лиды хантера. */
+async function pendingLeadIds(admin: Admin, projectId: string, userId: string) {
+  const { data } = await admin
+    .from("leads")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("assigned_to", userId)
+    .is("accepted_at", null);
+  return (data ?? []).map((l) => l.id);
+}
 
 interface TgMessage {
   chat: { id: number };
@@ -176,14 +197,25 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     return;
   }
 
-  // Завершить смену
+  // Завершить смену — если есть непринятые лиды, сначала спросить про передачу
   if (text === "🔚 Ушёл" || text === "/stop") {
-    await admin
-      .from("shifts")
-      .update({ ended_at: new Date().toISOString(), status: "closed" })
-      .eq("project_id", link.project_id)
-      .eq("user_id", link.user_id)
-      .eq("status", "open");
+    const pending = await pendingLeadIds(admin, link.project_id, link.user_id);
+    if (pending.length > 0) {
+      await sendMessage(
+        chatId,
+        `У вас ${pending.length} непринятых лид(ов). Передать их другому хантеру и завершить смену?`,
+        {
+          buttons: [
+            [
+              { text: "✅ Передать и уйти", callback_data: "leave_transfer" },
+              { text: "↩️ Остаться", callback_data: "leave_cancel" },
+            ],
+          ],
+        },
+      );
+      return;
+    }
+    await closeShift(admin, link.project_id, link.user_id);
     await sendMessage(chatId, "🔚 Смена завершена. Хорошего отдыха!");
     return;
   }
@@ -200,9 +232,40 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
   const messageId = cb.message?.message_id;
   const [action, leadId] = String(cb.data ?? "").split(":");
 
+  // Уход со смены с непринятыми лидами
+  if (action === "leave_transfer" || action === "leave_cancel") {
+    const link = chatId ? await findLink(admin, chatId) : null;
+    if (!link) {
+      await answerCallback(cb.id);
+      return;
+    }
+    if (action === "leave_cancel") {
+      await answerCallback(cb.id, "Остаётесь на смене");
+      if (chatId && messageId) await editMessageText(chatId, messageId, "↩️ Вы остаётесь на смене.");
+      return;
+    }
+    await answerCallback(cb.id, "Передаю лиды…");
+    const pending = await pendingLeadIds(admin, link.project_id, link.user_id);
+    let moved = 0;
+    for (const id of pending) {
+      if (await reassignLead(admin, link.project_id, id, link.user_id)) moved++;
+    }
+    await closeShift(admin, link.project_id, link.user_id);
+    if (chatId && messageId) {
+      await editMessageText(
+        chatId,
+        messageId,
+        `🔚 Смена завершена. Передано лидов: ${moved}${moved < pending.length ? ` (остальные некому передать)` : ""}.`,
+      );
+    }
+    return;
+  }
+
+  // accept / call — нужен лид
+  const link = chatId ? await findLink(admin, chatId) : null;
   const { data: lead } = await admin
     .from("leads")
-    .select("full_name, phone, source")
+    .select("assigned_to, full_name, phone, source")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -212,8 +275,14 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
   }
 
   if (action === "accept") {
+    // Принять можно только если лид всё ещё закреплён за этим хантером
+    if (link && lead.assigned_to && lead.assigned_to !== link.user_id) {
+      await answerCallback(cb.id, "Этот лид уже передан другому хантеру", true);
+      if (chatId && messageId) await editMessageText(chatId, messageId, "⏭ Лид передан другому хантеру.");
+      return;
+    }
+    await admin.from("leads").update({ accepted_at: new Date().toISOString() }).eq("id", leadId);
     await answerCallback(cb.id, "✅ Лид принят");
-    // Перерисовываем карточку: убираем «Принять», показываем «Позвонить»
     if (chatId && messageId) {
       await editMessageText(chatId, messageId, leadCardAccepted(lead), acceptedButtons(leadId));
     }
