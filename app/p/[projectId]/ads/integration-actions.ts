@@ -5,11 +5,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveRole } from "@/lib/queries";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
-import { verifyMetaAccount, fetchMetaInsights, fetchMetaCampaigns, guessObjective } from "@/lib/meta";
+import { verifyMetaAccount, fetchMetaInsights, fetchMetaCampaigns } from "@/lib/meta";
 
 const MANAGE_ROLES = ["owner", "director", "marketer", "targetologist"];
 
+/** Назначение кабинета: курс или вакансии. */
+export type AdPurpose = "course" | "vacancy";
+
 export interface MetaStatus {
+  purpose: AdPurpose;
   adAccountId: string;
   currency: string;
   kztRate: number;
@@ -18,28 +22,31 @@ export interface MetaStatus {
   lastError: string | null;
 }
 
-async function requireManage(projectId: string): Promise<string | null> {
-  const role = await getEffectiveRole(projectId);
-  return role && MANAGE_ROLES.includes(role) ? role : null;
+function purposeOf(v: string): AdPurpose {
+  return v === "vacancy" ? "vacancy" : "course";
 }
 
-/** Статус подключения (без токена) — для отрисовки раздела «Реклама». */
-export async function getMetaStatus(projectId: string): Promise<MetaStatus | null> {
+async function canManage(projectId: string): Promise<boolean> {
+  const role = await getEffectiveRole(projectId);
+  return !!role && MANAGE_ROLES.includes(role);
+}
+
+/** Статусы обоих кабинетов проекта (без токенов) — для отрисовки «Рекламы». */
+export async function getMetaStatuses(projectId: string): Promise<MetaStatus[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("meta_integration")
-    .select("ad_account_id, currency, kzt_rate, status, last_synced_at, last_error")
-    .eq("project_id", projectId)
-    .maybeSingle();
-  if (!data) return null;
-  return {
-    adAccountId: data.ad_account_id,
-    currency: data.currency,
-    kztRate: Number(data.kzt_rate),
-    status: data.status,
-    lastSyncedAt: data.last_synced_at,
-    lastError: data.last_error,
-  };
+    .select("purpose, ad_account_id, currency, kzt_rate, status, last_synced_at, last_error")
+    .eq("project_id", projectId);
+  return (data ?? []).map((d) => ({
+    purpose: purposeOf(d.purpose),
+    adAccountId: d.ad_account_id,
+    currency: d.currency,
+    kztRate: Number(d.kzt_rate),
+    status: d.status,
+    lastSyncedAt: d.last_synced_at,
+    lastError: d.last_error,
+  }));
 }
 
 export interface ConnectResult {
@@ -51,11 +58,12 @@ export interface ConnectResult {
 
 export async function connectMeta(
   projectId: string,
+  purpose: AdPurpose,
   adAccountId: string,
   token: string,
   kztRate: number,
 ): Promise<ConnectResult> {
-  if (!(await requireManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
   if (!adAccountId.trim()) return { ok: false, error: "Укажите ID рекламного аккаунта" };
   if (!token.trim()) return { ok: false, error: "Укажите токен доступа" };
 
@@ -84,6 +92,7 @@ export async function connectMeta(
   const { error } = await admin.from("meta_integration").upsert(
     {
       project_id: projectId,
+      purpose: purposeOf(purpose),
       ad_account_id: adAccountId.replace(/^act_/, "").trim(),
       token_enc,
       currency: account.currency,
@@ -92,7 +101,7 @@ export async function connectMeta(
       last_error: null,
       connected_by: user?.id ?? null,
     },
-    { onConflict: "project_id" },
+    { onConflict: "project_id,purpose" },
   );
   if (error) return { ok: false, error: "Не удалось сохранить подключение" };
 
@@ -100,10 +109,17 @@ export async function connectMeta(
   return { ok: true, name: account.name, currency: account.currency };
 }
 
-export async function disconnectMeta(projectId: string): Promise<{ ok: boolean }> {
-  if (!(await requireManage(projectId))) return { ok: false };
+export async function disconnectMeta(
+  projectId: string,
+  purpose: AdPurpose,
+): Promise<{ ok: boolean }> {
+  if (!(await canManage(projectId))) return { ok: false };
   const admin = createAdminClient();
-  await admin.from("meta_integration").delete().eq("project_id", projectId);
+  await admin
+    .from("meta_integration")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("purpose", purposeOf(purpose));
   revalidatePath(`/p/${projectId}/ads`);
   return { ok: true };
 }
@@ -117,21 +133,24 @@ export interface SyncResult {
   leads?: number;
 }
 
-/** Синхронизация расходов/лидов из Meta за период [since, until] → таблица ad_spend. */
+/** Синхронизация одного кабинета (по назначению) за период → ad_spend + ad_campaigns. */
 export async function syncMeta(
   projectId: string,
+  purpose: AdPurpose,
   since: string,
   until: string,
 ): Promise<SyncResult> {
-  if (!(await requireManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  const objective = purposeOf(purpose);
 
   const admin = createAdminClient();
   const { data: integ } = await admin
     .from("meta_integration")
     .select("ad_account_id, token_enc, kzt_rate")
     .eq("project_id", projectId)
+    .eq("purpose", objective)
     .maybeSingle();
-  if (!integ) return { ok: false, error: "Meta Ads не подключён" };
+  if (!integ) return { ok: false, error: "Кабинет не подключён" };
 
   let rows;
   try {
@@ -142,7 +161,8 @@ export async function syncMeta(
     await admin
       .from("meta_integration")
       .update({ status: "error", last_error: msg })
-      .eq("project_id", projectId);
+      .eq("project_id", projectId)
+      .eq("purpose", objective);
     revalidatePath(`/p/${projectId}/ads`);
     return { ok: false, error: msg };
   }
@@ -153,7 +173,7 @@ export async function syncMeta(
     .map((r) => ({
       project_id: projectId,
       channel: "meta",
-      objective: guessObjective(r.campaign),
+      objective, // цель определяется кабинетом, а не названием
       campaign: r.campaign,
       amount: Math.round(r.spend * rate),
       spent_on: r.date,
@@ -162,12 +182,13 @@ export async function syncMeta(
       note: null as string | null,
     }));
 
-  // Идемпотентность: заменяем ранее синхронизированные строки Meta за период
+  // Идемпотентность по этому кабинету (objective) и периоду
   await admin
     .from("ad_spend")
     .delete()
     .eq("project_id", projectId)
     .eq("source", "meta")
+    .eq("objective", objective)
     .gte("spent_on", since)
     .lte("spent_on", until);
 
@@ -176,11 +197,16 @@ export async function syncMeta(
     if (error) return { ok: false, error: "Не удалось записать расходы" };
   }
 
-  // Обновляем снимок кампаний (раздел «Кампании») — best-effort, без срыва синка
+  // Снимок кампаний этого кабинета — best-effort
   try {
     const token = decryptSecret(integ.token_enc);
     const camps = await fetchMetaCampaigns(integ.ad_account_id, token, since, until);
-    await admin.from("ad_campaigns").delete().eq("project_id", projectId).eq("channel", "meta");
+    await admin
+      .from("ad_campaigns")
+      .delete()
+      .eq("project_id", projectId)
+      .eq("channel", "meta")
+      .eq("objective", objective);
     if (camps.length > 0) {
       await admin.from("ad_campaigns").insert(
         camps.map((c) => ({
@@ -188,7 +214,7 @@ export async function syncMeta(
           channel: "meta",
           external_id: c.externalId,
           name: c.name,
-          objective: guessObjective(c.name),
+          objective,
           meta_objective: c.metaObjective,
           status: c.status,
           spend: Math.round(c.spend * rate),
@@ -208,7 +234,8 @@ export async function syncMeta(
   await admin
     .from("meta_integration")
     .update({ status: "connected", last_error: null, last_synced_at: new Date().toISOString() })
-    .eq("project_id", projectId);
+    .eq("project_id", projectId)
+    .eq("purpose", objective);
 
   revalidatePath(`/p/${projectId}/ads`);
   revalidatePath(`/p/${projectId}/finance`);

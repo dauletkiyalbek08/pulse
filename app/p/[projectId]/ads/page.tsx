@@ -2,17 +2,14 @@ import { Megaphone, GraduationCap, Briefcase, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccess } from "@/lib/queries";
 import { rangeFromSearchParams } from "@/lib/date-range";
-import { localDay } from "@/lib/attendance";
-import { channelShort, objectiveLabel } from "@/lib/ads";
+import { objectiveLabel } from "@/lib/ads";
 import { formatCurrency, formatNumber, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { ExportButton } from "@/components/export-button";
-import { AdSpendForm } from "@/components/ad-spend-form";
-import { AdSpendList, type AdRow } from "@/components/ad-spend-list";
 import { CampaignsTable, type CampaignRow } from "@/components/campaigns-table";
 import { MetaIntegration } from "@/components/meta-integration";
-import { getMetaStatus } from "@/app/p/[projectId]/ads/integration-actions";
+import { getMetaStatuses } from "@/app/p/[projectId]/ads/integration-actions";
 
 export default async function AdsPage({
   params,
@@ -26,40 +23,39 @@ export default async function AdsPage({
   const range = rangeFromSearchParams(await searchParams);
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("ad_spend")
-    .select("id, channel, objective, campaign, amount, spent_on, leads, note")
-    .eq("project_id", projectId)
-    .gte("spent_on", range.from)
-    .lte("spent_on", range.to)
-    .order("spent_on", { ascending: false });
 
-  const metaStatus = await getMetaStatus(projectId);
+  const [{ data: campData }, statuses] = await Promise.all([
+    supabase
+      .from("ad_campaigns")
+      .select("id, name, objective, status, spend, impressions, clicks, reach, leads, period_from, period_to")
+      .eq("project_id", projectId)
+      .order("spend", { ascending: false }),
+    getMetaStatuses(projectId),
+  ]);
 
-  const { data: campData } = await supabase
-    .from("ad_campaigns")
-    .select("id, name, objective, status, spend, impressions, clicks, reach, leads, period_from, period_to")
-    .eq("project_id", projectId)
-    .order("spend", { ascending: false });
   const campaigns = (campData ?? []) as (CampaignRow & {
     period_from: string | null;
     period_to: string | null;
   })[];
+
+  const courseStatus = statuses.find((s) => s.purpose === "course") ?? null;
+  const vacancyStatus = statuses.find((s) => s.purpose === "vacancy") ?? null;
+
+  const totalSpend = campaigns.reduce((s, c) => s + Number(c.spend), 0);
+  const courseSpend = campaigns.filter((c) => c.objective === "course").reduce((s, c) => s + Number(c.spend), 0);
+  const vacancySpend = campaigns.filter((c) => c.objective === "vacancy").reduce((s, c) => s + Number(c.spend), 0);
+  const totalLeads = campaigns.reduce((s, c) => s + Number(c.leads), 0);
+  const cpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
+
   const campPeriod =
     campaigns[0]?.period_from && campaigns[0]?.period_to
       ? `${formatDate(campaigns[0].period_from)} – ${formatDate(campaigns[0].period_to)}`
       : null;
-  const campTotals = campaigns.reduce(
-    (a, c) => ({
-      spend: a.spend + Number(c.spend),
-      leads: a.leads + Number(c.leads),
-    }),
-    { spend: 0, leads: 0 },
-  );
+
   const campExport = campaigns.map((c) => [
     c.name,
     objectiveLabel(c.objective),
-    c.status,
+    c.status === "active" ? "Активна" : "Пауза",
     c.impressions,
     c.clicks,
     c.impressions > 0 ? `${((c.clicks / c.impressions) * 100).toFixed(2)}%` : "—",
@@ -69,46 +65,14 @@ export default async function AdsPage({
     Math.round(c.spend),
   ]);
 
-  const rows = (data ?? []) as AdRow[];
-  const total = rows.reduce((s, r) => s + Number(r.amount), 0);
-  const courseSpend = rows.filter((r) => r.objective === "course").reduce((s, r) => s + Number(r.amount), 0);
-  const vacancySpend = rows.filter((r) => r.objective === "vacancy").reduce((s, r) => s + Number(r.amount), 0);
-  const totalLeads = rows.reduce((s, r) => s + Number(r.leads), 0);
-  const cpl = totalLeads > 0 ? total / totalLeads : 0;
-
-  // Разбивка по каналам
-  const byChannel = new Map<string, number>();
-  for (const r of rows) byChannel.set(r.channel, (byChannel.get(r.channel) ?? 0) + Number(r.amount));
-  const channels = [...byChannel.entries()]
-    .map(([key, sum]) => ({ key, sum, pct: total > 0 ? (sum / total) * 100 : 0 }))
-    .sort((a, b) => b.sum - a.sum);
-
-  const exportRows = rows.map((r) => [
-    r.spent_on,
-    channelShort(r.channel),
-    objectiveLabel(r.objective),
-    r.campaign,
-    r.leads,
-    r.leads > 0 ? Math.round(r.amount / r.leads) : 0,
-    Math.round(r.amount),
-    r.note ?? "",
-  ]);
-
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <PageHeader title="Реклама" subtitle={`Таргетинг и рекламный бюджет · период: ${range.label}`}>
-        <div className="flex items-center gap-2">
-          <ExportButton
-            filename={`reklama-${range.from}_${range.to}`}
-            headers={["Дата", "Канал", "Цель", "Кампания", "Лидов", "Цена лида", "Расход", "Комментарий"]}
-            rows={exportRows}
-          />
-          <DateRangePicker preset={range.preset} from={range.from} to={range.to} label={range.label} />
-        </div>
+    <div className="mx-auto max-w-6xl px-6 py-8">
+      <PageHeader title="Реклама" subtitle="Рекламные кабинеты Meta, кампании и расходы — автоматически">
+        <DateRangePicker preset={range.preset} from={range.from} to={range.to} label={range.label} />
       </PageHeader>
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Всего на рекламу" value={formatCurrency(total)} icon={Megaphone} tone="brand" />
+        <StatCard label="Всего на рекламу" value={formatCurrency(totalSpend)} icon={Megaphone} tone="brand" />
         <StatCard label="На курс" value={formatCurrency(courseSpend)} icon={GraduationCap} tone="ink" />
         <StatCard label="На вакансии" value={formatCurrency(vacancySpend)} icon={Briefcase} tone="ink" />
         <StatCard
@@ -119,11 +83,22 @@ export default async function AdsPage({
         />
       </div>
 
-      {/* Подключение рекламного кабинета Meta Ads */}
-      <div className="mb-6">
+      {/* Два рекламных кабинета: курс и вакансии */}
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <MetaIntegration
           projectId={projectId}
-          status={metaStatus}
+          purpose="course"
+          title="Курс"
+          status={courseStatus}
+          rangeFrom={range.from}
+          rangeTo={range.to}
+          rangeLabel={range.label}
+        />
+        <MetaIntegration
+          projectId={projectId}
+          purpose="vacancy"
+          title="Вакансии"
+          status={vacancyStatus}
           rangeFrom={range.from}
           rangeTo={range.to}
           rangeLabel={range.label}
@@ -131,52 +106,24 @@ export default async function AdsPage({
       </div>
 
       {/* Кампании (как в Ads Manager) */}
-      <div className="mb-8">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-ink">Кампании</h2>
-            <p className="text-xs text-muted">
-              {campaigns.length > 0
-                ? `${campaigns.length} кампаний${campPeriod ? ` · ${campPeriod}` : ""} · расход ${formatCurrency(campTotals.spend)} · лидов ${formatNumber(campTotals.leads)}`
-                : "Подключите Meta Ads и нажмите «Синхронизировать»"}
-            </p>
-          </div>
-          {campaigns.length > 0 && (
-            <ExportButton
-              filename={`kampanii-${projectId.slice(0, 8)}`}
-              headers={["Кампания", "Цель", "Статус", "Показы", "Клики", "CTR", "Охват", "Лиды", "Цена лида", "Расход"]}
-              rows={campExport}
-            />
-          )}
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-ink">Кампании</h2>
+          <p className="text-xs text-muted">
+            {campaigns.length > 0
+              ? `${campaigns.length} кампаний${campPeriod ? ` · ${campPeriod}` : ""}`
+              : "Подключите кабинет и нажмите «Синхронизировать»"}
+          </p>
         </div>
-        <CampaignsTable rows={campaigns} />
+        {campaigns.length > 0 && (
+          <ExportButton
+            filename={`kampanii-${projectId.slice(0, 8)}`}
+            headers={["Кампания", "Цель", "Статус", "Показы", "Клики", "CTR", "Охват", "Результаты", "Цена за результат", "Потрачено"]}
+            rows={campExport}
+          />
+        )}
       </div>
-
-      <div className="mb-6">
-        <AdSpendForm projectId={projectId} today={localDay()} />
-      </div>
-
-      {channels.length > 0 && (
-        <div className="mb-6 rounded-card bg-surface p-6 shadow-soft ring-1 ring-line">
-          <h2 className="mb-4 text-base font-semibold text-ink">Расходы по каналам</h2>
-          <div className="space-y-3">
-            {channels.map((c) => (
-              <div key={c.key}>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="text-muted">{channelShort(c.key)}</span>
-                  <span className="font-medium text-ink">{formatCurrency(c.sum)}</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-canvas">
-                  <div className="h-full rounded-full bg-brand" style={{ width: `${Math.max(c.pct, 2)}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <h2 className="mb-3 text-base font-semibold text-ink">Расходы на рекламу</h2>
-      <AdSpendList projectId={projectId} rows={rows} />
+      <CampaignsTable rows={campaigns} />
     </div>
   );
 }

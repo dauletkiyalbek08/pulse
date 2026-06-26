@@ -190,6 +190,7 @@ export type Database = {
           last_error: string | null
           last_synced_at: string | null
           project_id: string
+          purpose: string
           status: string
           token_enc: string
         }
@@ -202,6 +203,7 @@ export type Database = {
           last_error?: string | null
           last_synced_at?: string | null
           project_id: string
+          purpose?: string
           status?: string
           token_enc: string
         }
@@ -214,6 +216,7 @@ export type Database = {
           last_error?: string | null
           last_synced_at?: string | null
           project_id?: string
+          purpose?: string
           status?: string
           token_enc?: string
         }

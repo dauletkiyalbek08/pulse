@@ -9,16 +9,21 @@ import {
   disconnectMeta,
   syncMeta,
   type MetaStatus,
+  type AdPurpose,
 } from "@/app/p/[projectId]/ads/integration-actions";
 
 export function MetaIntegration({
   projectId,
+  purpose,
+  title,
   status,
   rangeFrom,
   rangeTo,
   rangeLabel,
 }: {
   projectId: string;
+  purpose: AdPurpose;
+  title: string;
   status: MetaStatus | null;
   rangeFrom: string;
   rangeTo: string;
@@ -37,7 +42,7 @@ export function MetaIntegration({
   function connect() {
     setMsg(null);
     startTransition(async () => {
-      const res = await connectMeta(projectId, account, token, Number(rate || 0));
+      const res = await connectMeta(projectId, purpose, account, token, Number(rate || 0));
       setToken("");
       if (!res.ok) {
         setMsg({ kind: "err", text: res.error ?? "Ошибка" });
@@ -51,7 +56,7 @@ export function MetaIntegration({
   function sync() {
     setMsg(null);
     startTransition(async () => {
-      const res = await syncMeta(projectId, rangeFrom, rangeTo);
+      const res = await syncMeta(projectId, purpose, rangeFrom, rangeTo);
       if (!res.ok) {
         setMsg({ kind: "err", text: res.error ?? "Ошибка синхронизации" });
         return;
@@ -65,37 +70,40 @@ export function MetaIntegration({
   }
 
   function disconnect() {
-    if (!confirm("Отключить Meta Ads? Синхронизированные расходы останутся в истории.")) return;
+    if (!confirm("Отключить кабинет? Синхронизированные расходы останутся в истории.")) return;
     startTransition(async () => {
-      await disconnectMeta(projectId);
+      await disconnectMeta(projectId, purpose);
       setMsg(null);
       router.refresh();
     });
   }
 
+  const badge = (
+    <span className="rounded-md bg-canvas px-2 py-0.5 text-xs font-medium text-muted ring-1 ring-line">
+      {title}
+    </span>
+  );
+
   /* ─────────── Не подключено: форма ─────────── */
   if (!status) {
     return (
-      <div className="rounded-card border border-dashed border-line bg-surface p-5">
-        <div className="mb-3 flex items-start gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
+      <div className="flex h-full flex-col rounded-card border border-dashed border-line bg-surface p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
             <Plug className="h-5 w-5" />
           </span>
-          <div>
-            <div className="text-sm font-semibold text-ink">Подключить Meta Ads</div>
-            <p className="mt-0.5 max-w-xl text-sm text-muted">
-              Расходы и лиды будут подтягиваться автоматически. Токен (System User Token)
-              хранится только на сервере в зашифрованном виде и в браузер не передаётся.
-            </p>
-          </div>
+          <div className="text-sm font-semibold text-ink">Кабинет Meta · {title}</div>
         </div>
+        <p className="mb-3 text-xs text-muted">
+          Токен (System User Token) хранится только на сервере в зашифрованном виде.
+        </p>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="space-y-2">
           <input
             value={account}
             onChange={(e) => setAccount(e.target.value)}
             placeholder="ID аккаунта (act_… или цифры)"
-            className={inputCls}
+            className={`${inputCls} w-full`}
           />
           <input
             type="password"
@@ -103,30 +111,27 @@ export function MetaIntegration({
             onChange={(e) => setToken(e.target.value)}
             placeholder="Токен доступа Meta"
             autoComplete="off"
-            className={`${inputCls} sm:col-span-2`}
+            className={`${inputCls} w-full`}
           />
-        </div>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <label className="flex items-center gap-2 text-sm text-muted">
-            Курс валюты кабинета к ₸
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted">Курс к ₸</span>
             <input
               type="number"
               min={1}
               value={rate}
               onChange={(e) => setRate(e.target.value)}
-              className={`${inputCls} w-24`}
+              className={`${inputCls} w-20`}
             />
-          </label>
-          <span className="text-xs text-faint">Если кабинет в ₸ — оставьте 1.</span>
-          <button
-            type="button"
-            onClick={connect}
-            disabled={pending}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60 sm:ml-auto"
-          >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
-            Подключить
-          </button>
+            <button
+              type="button"
+              onClick={connect}
+              disabled={pending}
+              className="ml-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60"
+            >
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
+              Подключить
+            </button>
+          </div>
         </div>
 
         {msg && <Banner msg={msg} />}
@@ -136,57 +141,55 @@ export function MetaIntegration({
 
   /* ─────────── Подключено: статус + синхронизация ─────────── */
   return (
-    <div className="rounded-card bg-surface p-5 shadow-soft ring-1 ring-line">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span
-            className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-              status.status === "error" ? "bg-red-50 text-red-600" : "bg-brand-soft text-brand-ink"
-            }`}
-          >
-            {status.status === "error" ? (
-              <AlertTriangle className="h-5 w-5" />
-            ) : (
-              <CheckCircle2 className="h-5 w-5" />
-            )}
-          </span>
-          <div>
-            <div className="text-sm font-semibold text-ink">
-              Meta Ads подключён · act_{status.adAccountId}
-            </div>
-            <p className="mt-0.5 text-sm text-muted">
-              Валюта: {status.currency}
-              {status.currency !== "KZT" && ` · курс ${status.kztRate} ₸`} ·{" "}
-              {status.lastSyncedAt
-                ? `обновлено ${formatDateTime(status.lastSyncedAt)}`
-                : "ещё не синхронизировано"}
-            </p>
-            {status.status === "error" && status.lastError && (
-              <p className="mt-1 text-xs text-red-600">{status.lastError}</p>
-            )}
-          </div>
-        </div>
+    <div className="flex h-full flex-col rounded-card bg-surface p-5 shadow-soft ring-1 ring-line">
+      <div className="mb-2 flex items-center gap-2">
+        <span
+          className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+            status.status === "error" ? "bg-red-50 text-red-600" : "bg-brand-soft text-brand-ink"
+          }`}
+        >
+          {status.status === "error" ? (
+            <AlertTriangle className="h-5 w-5" />
+          ) : (
+            <CheckCircle2 className="h-5 w-5" />
+          )}
+        </span>
+        <div className="text-sm font-semibold text-ink">Кабинет · {title}</div>
+        <span className="ml-auto">{badge}</span>
+      </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={sync}
-            disabled={pending}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60"
-          >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Синхронизировать ({rangeLabel})
-          </button>
-          <button
-            type="button"
-            onClick={disconnect}
-            disabled={pending}
-            aria-label="Отключить"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
-          >
-            <Link2Off className="h-4 w-4" />
-          </button>
-        </div>
+      <p className="text-xs text-muted">
+        act_{status.adAccountId} · {status.currency}
+        {status.currency !== "KZT" && ` · курс ${status.kztRate} ₸`}
+      </p>
+      <p className="text-xs text-faint">
+        {status.lastSyncedAt
+          ? `обновлено ${formatDateTime(status.lastSyncedAt)}`
+          : "ещё не синхронизировано"}
+      </p>
+      {status.status === "error" && status.lastError && (
+        <p className="mt-1 text-xs text-red-600">{status.lastError}</p>
+      )}
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={sync}
+          disabled={pending}
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60"
+        >
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Синхронизировать ({rangeLabel})
+        </button>
+        <button
+          type="button"
+          onClick={disconnect}
+          disabled={pending}
+          aria-label="Отключить"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
+        >
+          <Link2Off className="h-4 w-4" />
+        </button>
       </div>
 
       {msg && <Banner msg={msg} />}
