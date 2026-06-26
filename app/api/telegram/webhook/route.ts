@@ -1,7 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineMeters } from "@/lib/geo";
-import { sendMessage, answerCallback, shiftKeyboard } from "@/lib/telegram";
+import {
+  sendMessage,
+  answerCallback,
+  editMessageText,
+  shiftKeyboard,
+  acceptedButtons,
+  leadCardAccepted,
+} from "@/lib/telegram";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -14,7 +21,7 @@ interface TgMessage {
 interface TgCallback {
   id: string;
   data?: string;
-  message?: { chat?: { id: number } };
+  message?: { chat?: { id: number }; message_id?: number };
 }
 interface TgUpdate {
   message?: TgMessage;
@@ -190,11 +197,12 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
 
 async function handleCallback(admin: Admin, cb: TgCallback) {
   const chatId = cb.message?.chat?.id;
+  const messageId = cb.message?.message_id;
   const [action, leadId] = String(cb.data ?? "").split(":");
 
   const { data: lead } = await admin
     .from("leads")
-    .select("full_name, phone")
+    .select("full_name, phone, source")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -205,8 +213,10 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
 
   if (action === "accept") {
     await answerCallback(cb.id, "✅ Лид принят");
-    if (chatId)
-      await sendMessage(chatId, `✅ Вы приняли лид <b>${lead.full_name}</b>. Свяжитесь с клиентом.`);
+    // Перерисовываем карточку: убираем «Принять», показываем «Позвонить»
+    if (chatId && messageId) {
+      await editMessageText(chatId, messageId, leadCardAccepted(lead), acceptedButtons(leadId));
+    }
   } else if (action === "call") {
     await answerCallback(cb.id, lead.phone ?? "Телефон не указан", true);
     if (chatId && lead.phone) await sendMessage(chatId, `📞 ${lead.phone}`);

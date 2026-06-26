@@ -48,6 +48,22 @@ export function answerCallback(id: string, text?: string, alert = false) {
   });
 }
 
+/** Перерисовать уже отправленное сообщение (текст + кнопки). */
+export function editMessageText(
+  chatId: number | string,
+  messageId: number,
+  text: string,
+  buttons?: InlineButton[][],
+) {
+  return tgCall("editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: "HTML",
+    reply_markup: buttons ? { inline_keyboard: buttons } : undefined,
+  });
+}
+
 /** Клавиатура смены: начать смену (без гео) / подтвердить офис геолокацией / уйти. */
 export function shiftKeyboard() {
   return {
@@ -75,11 +91,28 @@ export function leadCard(lead: {
     .join("\n");
 }
 
+/** Кнопки нового лида: только «Принять лид». */
 export function leadButtons(leadId: string): InlineButton[][] {
+  return [[{ text: "✅ Принять лид", callback_data: `accept:${leadId}` }]];
+}
+
+/** Кнопки после принятия: «Позвонить». */
+export function acceptedButtons(leadId: string): InlineButton[][] {
+  return [[{ text: "📞 Позвонить", callback_data: `call:${leadId}` }]];
+}
+
+/** Карточка лида в работе (после «Принять»). */
+export function leadCardAccepted(lead: {
+  full_name: string;
+  phone: string | null;
+  source: string | null;
+}): string {
   return [
-    [
-      { text: "✅ Принять лид", callback_data: `accept:${leadId}` },
-      { text: "📞 Позвонить", callback_data: `call:${leadId}` },
-    ],
-  ];
+    "🟢 <b>Лид в работе</b>",
+    `👤 ${lead.full_name}`,
+    lead.phone ? `📞 ${lead.phone}` : "📞 —",
+    lead.source ? `🔗 Источник: ${lead.source}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
