@@ -61,7 +61,6 @@ export async function connectMeta(
   purpose: AdPurpose,
   adAccountId: string,
   token: string,
-  kztRate: number,
 ): Promise<ConnectResult> {
   if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
   if (!adAccountId.trim()) return { ok: false, error: "Укажите ID рекламного аккаунта" };
@@ -86,8 +85,6 @@ export async function connectMeta(
     data: { user },
   } = await supabase.auth.getUser();
 
-  const rate = account.currency === "KZT" ? 1 : kztRate > 0 ? kztRate : 1;
-
   const admin = createAdminClient();
   const { error } = await admin.from("meta_integration").upsert(
     {
@@ -96,7 +93,7 @@ export async function connectMeta(
       ad_account_id: adAccountId.replace(/^act_/, "").trim(),
       token_enc,
       currency: account.currency,
-      kzt_rate: rate,
+      kzt_rate: 1,
       status: "connected",
       last_error: null,
       connected_by: user?.id ?? null,
@@ -146,7 +143,7 @@ export async function syncMeta(
   const admin = createAdminClient();
   const { data: integ } = await admin
     .from("meta_integration")
-    .select("ad_account_id, token_enc, kzt_rate")
+    .select("ad_account_id, token_enc")
     .eq("project_id", projectId)
     .eq("purpose", objective)
     .maybeSingle();
@@ -167,7 +164,6 @@ export async function syncMeta(
     return { ok: false, error: msg };
   }
 
-  const rate = Number(integ.kzt_rate) || 1;
   const inserts = rows
     .filter((r) => r.spend > 0 || r.leads > 0)
     .map((r) => ({
@@ -175,7 +171,8 @@ export async function syncMeta(
       channel: "meta",
       objective, // цель определяется кабинетом, а не названием
       campaign: r.campaign,
-      amount: Math.round(r.spend * rate),
+      amount: Math.round(r.spend * 100) / 100, // нативный USD
+      currency: "USD",
       spent_on: r.date,
       leads: r.leads,
       source: "meta",
@@ -217,7 +214,8 @@ export async function syncMeta(
           objective,
           meta_objective: c.metaObjective,
           status: c.status,
-          spend: Math.round(c.spend * rate),
+          spend: Math.round(c.spend * 100) / 100, // нативный USD
+          currency: "USD",
           impressions: c.impressions,
           clicks: c.clicks,
           reach: c.reach,

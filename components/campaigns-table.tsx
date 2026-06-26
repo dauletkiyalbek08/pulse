@@ -1,5 +1,5 @@
 import { campaignStatusMeta, objectiveLabel } from "@/lib/ads";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
+import { formatUsd, formatNumber, formatPercent } from "@/lib/format";
 
 export interface CampaignRow {
   id: string;
@@ -98,8 +98,8 @@ export function CampaignsTable({ rows }: { rows: CampaignRow[] }) {
                 <td className={`${num} text-muted`}>{formatNumber(c.impressions)}</td>
                 <td className={`${num} text-muted`}>{formatNumber(c.clicks)}</td>
                 <td className={`${num} text-muted`}>{formatPercent(ctr)}</td>
-                <td className={`${num} text-muted`}>{cpl != null ? formatCurrency(cpl) : "—"}</td>
-                <td className={`${num} font-semibold text-ink`}>{formatCurrency(c.spend)}</td>
+                <td className={`${num} text-muted`}>{cpl != null ? formatUsd(cpl, 2) : "—"}</td>
+                <td className={`${num} font-semibold text-ink`}>{formatUsd(c.spend)}</td>
               </tr>
             );
           })}
@@ -112,8 +112,8 @@ export function CampaignsTable({ rows }: { rows: CampaignRow[] }) {
             <td className={num}>{formatNumber(t.impressions)}</td>
             <td className={num}>{formatNumber(t.clicks)}</td>
             <td className={num}>{formatPercent(totalCtr)}</td>
-            <td className={num}>{totalCpl != null ? formatCurrency(totalCpl) : "—"}</td>
-            <td className={num}>{formatCurrency(t.spend)}</td>
+            <td className={num}>{totalCpl != null ? formatUsd(totalCpl, 2) : "—"}</td>
+            <td className={num}>{formatUsd(t.spend)}</td>
           </tr>
         </tfoot>
       </table>

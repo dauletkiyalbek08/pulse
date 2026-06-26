@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plug, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Link2Off } from "lucide-react";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatUsd, formatDateTime } from "@/lib/format";
 import {
   connectMeta,
   disconnectMeta,
@@ -33,7 +33,6 @@ export function MetaIntegration({
   const [pending, startTransition] = useTransition();
   const [account, setAccount] = useState("");
   const [token, setToken] = useState("");
-  const [rate, setRate] = useState("480");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   const inputCls =
@@ -42,7 +41,7 @@ export function MetaIntegration({
   function connect() {
     setMsg(null);
     startTransition(async () => {
-      const res = await connectMeta(projectId, purpose, account, token, Number(rate || 0));
+      const res = await connectMeta(projectId, purpose, account, token);
       setToken("");
       if (!res.ok) {
         setMsg({ kind: "err", text: res.error ?? "Ошибка" });
@@ -63,7 +62,7 @@ export function MetaIntegration({
       }
       setMsg({
         kind: "ok",
-        text: `Синхронизировано: ${formatCurrency(res.total ?? 0)} · ${res.days ?? 0} дн. · ${res.leads ?? 0} лид(ов)`,
+        text: `Синхронизировано: ${formatUsd(res.total ?? 0)} · ${res.days ?? 0} дн. · ${res.leads ?? 0} лид(ов)`,
       });
       router.refresh();
     });
@@ -113,25 +112,15 @@ export function MetaIntegration({
             autoComplete="off"
             className={`${inputCls} w-full`}
           />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted">Курс к ₸</span>
-            <input
-              type="number"
-              min={1}
-              value={rate}
-              onChange={(e) => setRate(e.target.value)}
-              className={`${inputCls} w-20`}
-            />
-            <button
-              type="button"
-              onClick={connect}
-              disabled={pending}
-              className="ml-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60"
-            >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
-              Подключить
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={connect}
+            disabled={pending}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60"
+          >
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
+            Подключить
+          </button>
         </div>
 
         {msg && <Banner msg={msg} />}
@@ -160,7 +149,6 @@ export function MetaIntegration({
 
       <p className="text-xs text-muted">
         act_{status.adAccountId} · {status.currency}
-        {status.currency !== "KZT" && ` · курс ${status.kztRate} ₸`}
       </p>
       <p className="text-xs text-faint">
         {status.lastSyncedAt

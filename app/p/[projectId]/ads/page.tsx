@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAccess } from "@/lib/queries";
 import { rangeFromSearchParams } from "@/lib/date-range";
 import { objectiveLabel } from "@/lib/ads";
-import { formatCurrency, formatNumber, formatDate } from "@/lib/format";
+import { formatUsd, formatNumber, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { ExportButton } from "@/components/export-button";
@@ -67,17 +67,17 @@ export default async function AdsPage({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <PageHeader title="Реклама" subtitle="Рекламные кабинеты Meta, кампании и расходы — автоматически">
+      <PageHeader title="Реклама" subtitle="Кабинеты Meta, кампании и расходы (в долларах $) — автоматически">
         <DateRangePicker preset={range.preset} from={range.from} to={range.to} label={range.label} />
       </PageHeader>
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Всего на рекламу" value={formatCurrency(totalSpend)} icon={Megaphone} tone="brand" />
-        <StatCard label="На курс" value={formatCurrency(courseSpend)} icon={GraduationCap} tone="ink" />
-        <StatCard label="На вакансии" value={formatCurrency(vacancySpend)} icon={Briefcase} tone="ink" />
+        <StatCard label="Всего на рекламу" value={formatUsd(totalSpend)} icon={Megaphone} tone="brand" />
+        <StatCard label="На курс" value={formatUsd(courseSpend)} icon={GraduationCap} tone="ink" />
+        <StatCard label="На вакансии" value={formatUsd(vacancySpend)} icon={Briefcase} tone="ink" />
         <StatCard
           label={`Лидов: ${formatNumber(totalLeads)} · цена`}
-          value={cpl > 0 ? formatCurrency(cpl) : "—"}
+          value={cpl > 0 ? formatUsd(cpl, 2) : "—"}
           icon={Users}
           tone="ink"
         />

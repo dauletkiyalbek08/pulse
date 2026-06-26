@@ -57,6 +57,25 @@ export async function addFinanceEntry(
   return { ok: true };
 }
 
+/** Курс доллара к тенге для пересчёта рекламы (director/accountant/владелец). */
+export async function setUsdRate(projectId: string, rate: number): Promise<SaveResult> {
+  const role = await getEffectiveRole(projectId);
+  if (!role || !MANAGE_ROLES.includes(role)) {
+    return { ok: false, error: "Недостаточно прав" };
+  }
+  if (!Number.isFinite(rate) || rate < 1) return { ok: false, error: "Неверный курс" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_usd_rate", {
+    p_project_id: projectId,
+    p_rate: Math.round(rate),
+  });
+  if (error) return { ok: false, error: "Не удалось сохранить курс" };
+
+  revalidatePath(`/p/${projectId}/finance`);
+  return { ok: true };
+}
+
 export async function deleteFinanceEntry(
   projectId: string,
   id: string,

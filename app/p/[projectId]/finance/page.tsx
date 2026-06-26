@@ -11,12 +11,13 @@ import {
   payrollTotal,
   kindLabel,
 } from "@/lib/finance";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatUsd } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { ExportButton } from "@/components/export-button";
 import { FinanceForm } from "@/components/finance-form";
 import { FinanceLedger, type LedgerRow } from "@/components/finance-ledger";
+import { UsdRateEditor } from "@/components/usd-rate-editor";
 
 export default async function FinancePage({
   params,
@@ -32,7 +33,7 @@ export default async function FinancePage({
   const supabase = await createClient();
   const period = currentPeriod();
 
-  const [{ data: entries }, { data: adRows }, { data: salesRows }, { data: payrolls }] =
+  const [{ data: entries }, { data: adRows }, { data: salesRows }, { data: payrolls }, { data: project }] =
     await Promise.all([
       supabase
         .from("finance_entries")
@@ -43,7 +44,7 @@ export default async function FinancePage({
         .order("spent_on", { ascending: false }),
       supabase
         .from("ad_spend")
-        .select("id, channel, objective, campaign, amount, spent_on")
+        .select("id, channel, objective, campaign, amount, currency, spent_on")
         .eq("project_id", projectId)
         .gte("spent_on", range.from)
         .lte("spent_on", range.to),
@@ -58,21 +59,29 @@ export default async function FinancePage({
         .select("base_salary, days_planned, days_worked, kpi_bonus, bonus, deduction")
         .eq("project_id", projectId)
         .eq("period", period),
+      supabase.from("projects").select("usd_rate").eq("id", projectId).maybeSingle(),
     ]);
 
+  const usdRate = Number(project?.usd_rate ?? 500);
   const manual = (entries ?? []) as LedgerRow[];
 
-  // Расходы на рекламу собираются из раздела «Реклама» как заблокированные строки
-  const adAsLedger: LedgerRow[] = (adRows ?? []).map((a) => ({
-    id: a.id,
-    kind: "expense",
-    category: "ad_spend",
-    title: `${channelShort(a.channel)} · ${a.campaign}`,
-    amount: Number(a.amount),
-    spent_on: a.spent_on,
-    note: objectiveLabel(a.objective),
-    locked: true,
-  }));
+  // Реклама приходит из «Рекламы» в валюте кабинета (обычно USD) → переводим в ₸
+  let adSpendUsd = 0;
+  const adAsLedger: LedgerRow[] = (adRows ?? []).map((a) => {
+    const native = Number(a.amount);
+    const kzt = a.currency === "USD" ? native * usdRate : native;
+    if (a.currency === "USD") adSpendUsd += native;
+    return {
+      id: a.id,
+      kind: "expense",
+      category: "ad_spend",
+      title: `${channelShort(a.channel)} · ${a.campaign}`,
+      amount: kzt,
+      spent_on: a.spent_on,
+      note: `${objectiveLabel(a.objective)}${a.currency === "USD" ? ` · ${formatUsd(native)}` : ""}`,
+      locked: true,
+    };
+  });
 
   const adSpendTotal = adAsLedger.reduce((s, r) => s + r.amount, 0);
   const manualExpense = manual.filter((r) => r.kind === "expense").reduce((s, r) => s + Number(r.amount), 0);
@@ -142,15 +151,18 @@ export default async function FinancePage({
         <StatCard label={`Зарплаты · ${periodLabel(period)}`} value={formatCurrency(payrollFund)} icon={Users} tone="ink" />
       </div>
 
-      <p className="mb-6 rounded-card bg-canvas px-4 py-3 text-sm text-muted">
-        Расход на рекламу за период:{" "}
-        <span className="font-semibold text-ink">{formatCurrency(adSpendTotal)}</span> — собран
-        автоматически из раздела{" "}
-        <a href={`/p/${projectId}/ads`} className="font-medium text-brand-ink hover:underline">
-          «Реклама»
-        </a>
-        .
-      </p>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-card bg-canvas px-4 py-3 text-sm text-muted">
+        <span>
+          Реклама за период:{" "}
+          <span className="font-semibold text-ink">{formatCurrency(adSpendTotal)}</span>
+          {adSpendUsd > 0 && ` (${formatUsd(adSpendUsd)} по курсу ${usdRate} ₸)`} — авто из{" "}
+          <a href={`/p/${projectId}/ads`} className="font-medium text-brand-ink hover:underline">
+            «Реклама»
+          </a>
+          .
+        </span>
+        <UsdRateEditor projectId={projectId} rate={usdRate} />
+      </div>
 
       <div className="mb-6">
         <FinanceForm projectId={projectId} today={localDay()} />

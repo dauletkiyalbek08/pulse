@@ -85,6 +85,7 @@ export type Database = {
           channel: string
           created_at: string
           created_by: string | null
+          currency: string
           id: string
           leads: number
           note: string | null
@@ -99,6 +100,7 @@ export type Database = {
           channel?: string
           created_at?: string
           created_by?: string | null
+          currency?: string
           id?: string
           leads?: number
           note?: string | null
@@ -113,6 +115,7 @@ export type Database = {
           channel?: string
           created_at?: string
           created_by?: string | null
+          currency?: string
           id?: string
           leads?: number
           note?: string | null
@@ -127,6 +130,7 @@ export type Database = {
         Row: {
           channel: string
           clicks: number
+          currency: string
           external_id: string | null
           id: string
           impressions: number
@@ -145,6 +149,7 @@ export type Database = {
         Insert: {
           channel?: string
           clicks?: number
+          currency?: string
           external_id?: string | null
           id?: string
           impressions?: number
@@ -163,6 +168,7 @@ export type Database = {
         Update: {
           channel?: string
           clicks?: number
+          currency?: string
           external_id?: string | null
           id?: string
           impressions?: number
@@ -485,6 +491,7 @@ export type Database = {
           owner_id: string
           plan: string
           status: string
+          usd_rate: number
         }
         Insert: {
           accent_color?: string | null
@@ -502,6 +509,7 @@ export type Database = {
           owner_id: string
           plan?: string
           status?: string
+          usd_rate?: number
         }
         Update: {
           accent_color?: string | null
@@ -519,6 +527,7 @@ export type Database = {
           owner_id?: string
           plan?: string
           status?: string
+          usd_rate?: number
         }
         Relationships: []
       }
@@ -777,6 +786,10 @@ export type Database = {
       }
       fire_member: {
         Args: { p_member_id: string }
+        Returns: undefined
+      }
+      set_usd_rate: {
+        Args: { p_project_id: string; p_rate: number }
         Returns: undefined
       }
     }

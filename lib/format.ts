@@ -24,6 +24,14 @@ export function formatCurrencyShort(value: number, currency = DEFAULT_CURRENCY):
   return formatCurrency(value, currency);
 }
 
+/** Сумма в долларах: «$35 316» (для рекламных кабинетов Meta). */
+export function formatUsd(value: number, digits = 0): string {
+  return `$${value.toLocaleString("ru-RU", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}`;
+}
+
 export function formatNumber(value: number): string {
   return ruNumber.format(value);
 }
