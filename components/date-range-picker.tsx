@@ -1,9 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Calendar, ChevronDown } from "lucide-react";
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { RANGE_PRESETS, type RangePreset } from "@/lib/date-range";
+
+const MONTHS = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+];
+const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const ymd = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
+const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+const firstWeekday = (y: number, m: number) => (new Date(y, m, 1).getDay() + 6) % 7; // Пн=0
 
 export function DateRangePicker({
   preset,
@@ -20,8 +31,11 @@ export function DateRangePicker({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
-  const [customFrom, setCustomFrom] = useState(from);
-  const [customTo, setCustomTo] = useState(to);
+  const [selFrom, setSelFrom] = useState<string | null>(from);
+  const [selTo, setSelTo] = useState<string | null>(to);
+  const initial = new Date(`${from}T00:00:00`);
+  const [viewY, setViewY] = useState(initial.getFullYear());
+  const [viewM, setViewM] = useState(initial.getMonth());
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,11 +60,47 @@ export function DateRangePicker({
   }
 
   function applyCustom() {
+    if (!selFrom) return;
+    const a = selFrom;
+    const b = selTo ?? selFrom;
+    const [f, t] = a <= b ? [a, b] : [b, a];
     const params = new URLSearchParams(searchParams.toString());
     params.set("range", "custom");
-    params.set("from", customFrom);
-    params.set("to", customTo);
+    params.set("from", f);
+    params.set("to", t);
     navigate(params);
+  }
+
+  function clickDay(d: string) {
+    if (!selFrom || (selFrom && selTo)) {
+      setSelFrom(d);
+      setSelTo(null);
+    } else if (d < selFrom) {
+      setSelTo(selFrom);
+      setSelFrom(d);
+    } else {
+      setSelTo(d);
+    }
+  }
+
+  const cells = useMemo(() => {
+    const lead = firstWeekday(viewY, viewM);
+    const total = daysInMonth(viewY, viewM);
+    const arr: (string | null)[] = Array(lead).fill(null);
+    for (let d = 1; d <= total; d++) arr.push(ymd(viewY, viewM, d));
+    return arr;
+  }, [viewY, viewM]);
+
+  const rangeFrom = selFrom && selTo ? (selFrom <= selTo ? selFrom : selTo) : selFrom;
+  const rangeTo = selFrom && selTo ? (selFrom <= selTo ? selTo : selFrom) : selFrom;
+
+  function prevMonth() {
+    const m = viewM - 1;
+    if (m < 0) { setViewM(11); setViewY(viewY - 1); } else setViewM(m);
+  }
+  function nextMonth() {
+    const m = viewM + 1;
+    if (m > 11) { setViewM(0); setViewY(viewY + 1); } else setViewM(m);
   }
 
   return (
@@ -66,8 +116,9 @@ export function DateRangePicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-64 rounded-card border border-line bg-surface p-2 shadow-card">
-          <ul className="space-y-0.5">
+        <div className="absolute right-0 z-30 mt-2 flex w-[420px] max-w-[90vw] flex-col gap-0 overflow-hidden rounded-card border border-line bg-surface shadow-card sm:flex-row">
+          {/* Пресеты */}
+          <ul className="max-h-[320px] overflow-y-auto border-b border-line p-2 sm:w-[160px] sm:border-b-0 sm:border-r">
             {RANGE_PRESETS.map((p) => (
               <li key={p.key}>
                 <button
@@ -84,34 +135,80 @@ export function DateRangePicker({
             ))}
           </ul>
 
-          <div className="mt-2 border-t border-line pt-2">
-            <div className="px-1 pb-1.5 text-xs font-medium text-muted">
-              Произвольный диапазон
+          {/* Календарь */}
+          <div className="p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={prevMonth}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-canvas hover:text-ink"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-sm font-semibold text-ink">
+                {MONTHS[viewM]} {viewY}
+              </span>
+              <button
+                type="button"
+                onClick={nextMonth}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-canvas hover:text-ink"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
-            <div className="flex items-center gap-2 px-1">
-              <input
-                type="date"
-                value={customFrom}
-                max={customTo}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="w-full rounded-lg border border-line bg-canvas px-2 py-1.5 text-xs text-ink focus:border-brand focus:outline-none"
-              />
-              <span className="text-faint">–</span>
-              <input
-                type="date"
-                value={customTo}
-                min={customFrom}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="w-full rounded-lg border border-line bg-canvas px-2 py-1.5 text-xs text-ink focus:border-brand focus:outline-none"
-              />
+
+            <div className="grid grid-cols-7 gap-0.5 text-center">
+              {WD.map((w) => (
+                <div key={w} className="py-1 text-[11px] font-medium text-faint">{w}</div>
+              ))}
+              {cells.map((d, i) => {
+                if (!d) return <div key={`b${i}`} />;
+                const day = Number(d.slice(8, 10));
+                const isEdge = d === rangeFrom || d === rangeTo;
+                const inRange = rangeFrom && rangeTo && d > rangeFrom && d < rangeTo;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => clickDay(d)}
+                    className={`h-8 rounded-lg text-sm transition ${
+                      isEdge
+                        ? "bg-brand font-semibold text-white"
+                        : inRange
+                          ? "bg-brand-soft text-brand-ink"
+                          : "text-ink hover:bg-canvas"
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
             </div>
-            <button
-              type="button"
-              onClick={applyCustom}
-              className="mt-2 w-full rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-strong"
-            >
-              Применить
-            </button>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <span className="text-xs text-muted">
+                {rangeFrom ? rangeFrom.split("-").reverse().join(".") : "—"}
+                {" – "}
+                {rangeTo ? rangeTo.split("-").reverse().join(".") : "…"}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted hover:text-ink"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={applyCustom}
+                  disabled={!selFrom}
+                  className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:opacity-50"
+                >
+                  Применить
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

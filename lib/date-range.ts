@@ -9,6 +9,8 @@ export type RangePreset =
   | "today"
   | "yesterday"
   | "last7"
+  | "last14"
+  | "last28"
   | "last30"
   | "thisMonth"
   | "lastMonth"
@@ -26,6 +28,8 @@ export const RANGE_PRESETS: { key: Exclude<RangePreset, "custom">; label: string
   { key: "today", label: "Сегодня" },
   { key: "yesterday", label: "Вчера" },
   { key: "last7", label: "Последние 7 дней" },
+  { key: "last14", label: "Последние 14 дней" },
+  { key: "last28", label: "Последние 28 дней" },
   { key: "last30", label: "Последние 30 дней" },
   { key: "thisMonth", label: "Этот месяц" },
   { key: "lastMonth", label: "Прошлый месяц" },
@@ -53,6 +57,8 @@ function isPreset(v: string | undefined): v is RangePreset {
     v === "today" ||
     v === "yesterday" ||
     v === "last7" ||
+    v === "last14" ||
+    v === "last28" ||
     v === "last30" ||
     v === "thisMonth" ||
     v === "lastMonth" ||
@@ -83,6 +89,14 @@ export function resolveDateRange(sp: {
     case "yesterday":
       from = addDays(today, -1);
       to = addDays(today, -1);
+      break;
+    case "last14":
+      from = addDays(today, -13);
+      to = today;
+      break;
+    case "last28":
+      from = addDays(today, -27);
+      to = today;
       break;
     case "last30":
       from = addDays(today, -29);

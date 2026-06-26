@@ -171,7 +171,7 @@ export async function fetchMetaEntities(
 
   let url =
     `${GRAPH}/act_${id}/insights` +
-    `?level=${level}&fields=${idField},${nameField},spend,impressions,clicks,reach,actions` +
+    `?level=${level}&fields=${idField},${nameField},spend,impressions,inline_link_clicks,reach,actions` +
     `&time_range=${timeRange}&limit=200&access_token=${encodeURIComponent(token)}`;
 
   const out: MetaCampaign[] = [];
@@ -195,7 +195,7 @@ export async function fetchMetaEntities(
         status: statusById.get(extId) ?? "active",
         spend: Number(r.spend || 0),
         impressions: Number(r.impressions || 0),
-        clicks: Number(r.clicks || 0),
+        clicks: Number((r.inline_link_clicks as string) || 0),
         reach: Number(r.reach || 0),
         leads: Math.round(leads),
       });
