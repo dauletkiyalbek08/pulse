@@ -7,6 +7,7 @@ import {
   Percent,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { requireAccess } from "@/lib/queries";
 import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
 import { PageHeader } from "@/components/page-header";
 import { MetricCard } from "@/components/metric-card";
@@ -22,6 +23,7 @@ export default async function SalesPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { projectId } = await params;
+  await requireAccess(projectId, "sales");
   const range = rangeFromSearchParams(await searchParams);
 
   const supabase = await createClient();

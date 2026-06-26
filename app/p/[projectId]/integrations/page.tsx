@@ -1,4 +1,5 @@
 import { Megaphone, Music2, Database, Send, Sparkles, Lock } from "lucide-react";
+import { requireAccess } from "@/lib/queries";
 import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/pill";
 
@@ -10,7 +11,14 @@ const SERVICES = [
   { name: "AI-сервисы", desc: "Claude / DeepSeek для контента и креативов", icon: Sparkles },
 ];
 
-export default function IntegrationsPage() {
+export default async function IntegrationsPage({
+  params,
+}: {
+  params: Promise<{ projectId: string }>;
+}) {
+  const { projectId } = await params;
+  await requireAccess(projectId, "integrations");
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <PageHeader

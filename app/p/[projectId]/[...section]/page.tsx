@@ -1,14 +1,17 @@
 import { Construction } from "lucide-react";
 import { labelForSegment } from "@/lib/menu";
+import { requireAccess } from "@/lib/queries";
 
 /** Заглушка для разделов меню, до которых ещё не дошли (ТЗ, раздел 8). */
 export default async function SectionPlaceholder({
   params,
 }: {
-  params: Promise<{ section: string[] }>;
+  params: Promise<{ projectId: string; section: string[] }>;
 }) {
-  const { section } = await params;
-  const label = labelForSegment(section?.[0] ?? "");
+  const { projectId, section } = await params;
+  const segment = section?.[0] ?? "";
+  await requireAccess(projectId, segment);
+  const label = labelForSegment(segment);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">

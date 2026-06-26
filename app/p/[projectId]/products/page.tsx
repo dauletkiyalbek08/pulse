@@ -1,5 +1,6 @@
 import { Boxes, Package, AlertTriangle, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { requireAccess } from "@/lib/queries";
 import { PageHeader } from "@/components/page-header";
 import { MetricCard } from "@/components/metric-card";
 import { Pill } from "@/components/pill";
@@ -11,6 +12,7 @@ export default async function ProductsPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
+  await requireAccess(projectId, "products");
 
   const supabase = await createClient();
 

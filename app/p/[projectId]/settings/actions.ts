@@ -3,8 +3,9 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { PROJECT_ROLES } from "@/lib/members";
 
-const VALID_ROLES = ["director", "manager", "hunter", "teacher"];
+const VALID_ROLES: readonly string[] = PROJECT_ROLES;
 
 export interface CreateEmployeeState {
   error: string | null;

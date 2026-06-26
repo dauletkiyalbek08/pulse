@@ -1,8 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getProject } from "@/lib/queries";
+import { getProject, getEffectiveRole } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
 import { getMenu } from "@/lib/menu";
+import { filterMenuByRole } from "@/lib/access";
 import { Sidebar } from "@/components/sidebar";
 import { ProjectTopbar } from "@/components/project-topbar";
 
@@ -21,19 +22,20 @@ export default async function ProjectLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [project, { data: profile }] = await Promise.all([
+  const [project, { data: profile }, role] = await Promise.all([
     getProject(projectId),
     supabase
       .from("profiles")
-      .select("full_name, global_role")
+      .select("full_name")
       .eq("id", user.id)
       .single(),
+    getEffectiveRole(projectId),
   ]);
 
   if (!project) notFound();
 
   const niche = getNiche(project.niche);
-  const sections = getMenu(niche.key);
+  const sections = filterMenuByRole(getMenu(niche.key), role);
 
   return (
     <div className="min-h-screen">
@@ -50,7 +52,7 @@ export default async function ProjectLayout({
           projectName={project.name}
           user={{
             name: profile?.full_name ?? user.email ?? "",
-            role: profile?.global_role ?? "director",
+            role: role ?? "director",
           }}
         />
         <main className="flex-1">{children}</main>

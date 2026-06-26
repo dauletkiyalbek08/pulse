@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getProject } from "@/lib/queries";
+import { getProject, requireAccess } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
 import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
 import { PageHeader } from "@/components/page-header";
@@ -25,6 +25,7 @@ export default async function TrialsPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { projectId } = await params;
+  await requireAccess(projectId, "trials");
   const range = rangeFromSearchParams(await searchParams);
 
   const supabase = await createClient();

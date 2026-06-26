@@ -2,14 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { signOut } from "@/app/actions";
 import { Avatar } from "@/components/avatar";
-
-const ROLE_LABEL: Record<string, string> = {
-  owner: "Владелец",
-  director: "Директор",
-  manager: "Менеджер",
-  hunter: "Хантер",
-  teacher: "Учитель",
-};
+import { roleLabel } from "@/lib/members";
 
 interface ProjectTopbarProps {
   projectName: string;
@@ -38,9 +31,7 @@ export function ProjectTopbar({ projectName, user }: ProjectTopbarProps) {
         <div className="ml-auto flex items-center gap-3">
           <div className="hidden text-right sm:block">
             <div className="text-sm font-semibold text-ink">{user.name}</div>
-            <div className="text-xs text-muted">
-              {ROLE_LABEL[user.role] ?? user.role}
-            </div>
+            <div className="text-xs text-muted">{roleLabel(user.role)}</div>
           </div>
           <Avatar name={user.name} />
           <form action={signOut}>

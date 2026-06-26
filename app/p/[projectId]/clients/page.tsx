@@ -1,5 +1,6 @@
 import { Users, Banknote, TrendingUp, ShoppingBag } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { requireAccess } from "@/lib/queries";
 import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -15,6 +16,7 @@ export default async function ClientsPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { projectId } = await params;
+  await requireAccess(projectId, "clients");
   const range = rangeFromSearchParams(await searchParams);
 
   const supabase = await createClient();
