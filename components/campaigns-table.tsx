@@ -35,6 +35,11 @@ function StatusToggle({ status }: { status: string }) {
   );
 }
 
+const cpm = (spend: number, impressions: number) => (impressions > 0 ? (spend / impressions) * 1000 : null);
+const cpc = (spend: number, clicks: number) => (clicks > 0 ? spend / clicks : null);
+const ctr = (clicks: number, impressions: number) => (impressions > 0 ? (clicks / impressions) * 100 : 0);
+const cpl = (spend: number, leads: number) => (leads > 0 ? spend / leads : null);
+
 export function CampaignsTable({ rows }: { rows: CampaignRow[] }) {
   if (rows.length === 0) {
     return (
@@ -54,65 +59,63 @@ export function CampaignsTable({ rows }: { rows: CampaignRow[] }) {
     }),
     { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0 },
   );
-  const totalCtr = t.impressions > 0 ? (t.clicks / t.impressions) * 100 : 0;
-  const totalCpl = t.leads > 0 ? t.spend / t.leads : null;
 
-  const num = "whitespace-nowrap px-4 py-3 text-right tabular-nums";
+  const num = "whitespace-nowrap px-3 py-3 text-right tabular-nums";
+  const usd2 = (v: number | null) => (v != null ? formatUsd(v, 2) : "—");
 
   return (
     <div className="overflow-x-auto rounded-card bg-surface shadow-card ring-1 ring-line">
-      <table className="w-full min-w-[920px] text-sm">
+      <table className="w-full min-w-[1080px] text-sm">
         <thead>
           <tr className="border-b border-line bg-canvas/60 text-left text-xs font-medium uppercase tracking-wide text-faint">
-            <th className="px-4 py-3">Кампания</th>
-            <th className="px-4 py-3 text-right">Результаты</th>
-            <th className="px-4 py-3 text-right">Охват</th>
-            <th className="px-4 py-3 text-right">Показы</th>
-            <th className="px-4 py-3 text-right">Клики</th>
-            <th className="px-4 py-3 text-right">CTR</th>
-            <th className="px-4 py-3 text-right">Цена за результат</th>
-            <th className="px-4 py-3 text-right">Потрачено</th>
+            <th className="px-3 py-3">Кампания</th>
+            <th className="px-3 py-3 text-right">Лиды</th>
+            <th className="px-3 py-3 text-right">CPL</th>
+            <th className="px-3 py-3 text-right">CPM</th>
+            <th className="px-3 py-3 text-right">CPC</th>
+            <th className="px-3 py-3 text-right">CTR</th>
+            <th className="px-3 py-3 text-right">Охват</th>
+            <th className="px-3 py-3 text-right">Показы</th>
+            <th className="px-3 py-3 text-right">Клики</th>
+            <th className="px-3 py-3 text-right">Потрачено</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((c) => {
-            const ctr = c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0;
-            const cpl = c.leads > 0 ? c.spend / c.leads : null;
-            return (
-              <tr key={c.id} className="border-b border-line last:border-0 transition hover:bg-canvas">
-                <td className="px-4 py-3">
-                  <div className="flex flex-col gap-1">
-                    <span className="font-medium text-ink">{c.name}</span>
-                    <div className="flex items-center gap-2">
-                      <StatusToggle status={c.status} />
-                      <span className="text-faint">·</span>
-                      <span className="text-xs text-muted">{objectiveLabel(c.objective)}</span>
-                    </div>
+          {rows.map((c) => (
+            <tr key={c.id} className="border-b border-line last:border-0 transition hover:bg-canvas">
+              <td className="px-3 py-3">
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium text-ink">{c.name}</span>
+                  <div className="flex items-center gap-2">
+                    <StatusToggle status={c.status} />
+                    <span className="text-faint">·</span>
+                    <span className="text-xs text-muted">{objectiveLabel(c.objective)}</span>
                   </div>
-                </td>
-                <td className={`${num} font-semibold text-ink`}>
-                  {c.leads > 0 ? formatNumber(c.leads) : "—"}
-                  <div className="text-[11px] font-normal text-faint">лиды</div>
-                </td>
-                <td className={`${num} text-muted`}>{formatNumber(c.reach)}</td>
-                <td className={`${num} text-muted`}>{formatNumber(c.impressions)}</td>
-                <td className={`${num} text-muted`}>{formatNumber(c.clicks)}</td>
-                <td className={`${num} text-muted`}>{formatPercent(ctr)}</td>
-                <td className={`${num} text-muted`}>{cpl != null ? formatUsd(cpl, 2) : "—"}</td>
-                <td className={`${num} font-semibold text-ink`}>{formatUsd(c.spend)}</td>
-              </tr>
-            );
-          })}
+                </div>
+              </td>
+              <td className={`${num} font-semibold text-ink`}>{c.leads > 0 ? formatNumber(c.leads) : "—"}</td>
+              <td className={`${num} text-muted`}>{usd2(cpl(c.spend, c.leads))}</td>
+              <td className={`${num} text-muted`}>{usd2(cpm(c.spend, c.impressions))}</td>
+              <td className={`${num} text-muted`}>{usd2(cpc(c.spend, c.clicks))}</td>
+              <td className={`${num} text-muted`}>{formatPercent(ctr(c.clicks, c.impressions))}</td>
+              <td className={`${num} text-muted`}>{formatNumber(c.reach)}</td>
+              <td className={`${num} text-muted`}>{formatNumber(c.impressions)}</td>
+              <td className={`${num} text-muted`}>{formatNumber(c.clicks)}</td>
+              <td className={`${num} font-semibold text-ink`}>{formatUsd(c.spend)}</td>
+            </tr>
+          ))}
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-line bg-canvas/60 font-semibold text-ink">
-            <td className="px-4 py-3">Итого по {formatNumber(rows.length)} кампаниям</td>
+            <td className="px-3 py-3">Итого · {formatNumber(rows.length)} кампаний</td>
             <td className={num}>{formatNumber(t.leads)}</td>
+            <td className={num}>{usd2(cpl(t.spend, t.leads))}</td>
+            <td className={num}>{usd2(cpm(t.spend, t.impressions))}</td>
+            <td className={num}>{usd2(cpc(t.spend, t.clicks))}</td>
+            <td className={num}>{formatPercent(ctr(t.clicks, t.impressions))}</td>
             <td className={num}>{formatNumber(t.reach)}</td>
             <td className={num}>{formatNumber(t.impressions)}</td>
             <td className={num}>{formatNumber(t.clicks)}</td>
-            <td className={num}>{formatPercent(totalCtr)}</td>
-            <td className={num}>{totalCpl != null ? formatUsd(totalCpl, 2) : "—"}</td>
             <td className={num}>{formatUsd(t.spend)}</td>
           </tr>
         </tfoot>

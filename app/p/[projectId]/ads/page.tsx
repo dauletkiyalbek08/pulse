@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAccess } from "@/lib/queries";
 import { rangeFromSearchParams } from "@/lib/date-range";
 import { objectiveLabel } from "@/lib/ads";
-import { formatUsd, formatNumber, formatDate } from "@/lib/format";
+import { formatUsd, formatNumber, formatDate, formatPercent } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { ExportButton } from "@/components/export-button";
@@ -45,24 +45,32 @@ export default async function AdsPage({
   const courseSpend = campaigns.filter((c) => c.objective === "course").reduce((s, c) => s + Number(c.spend), 0);
   const vacancySpend = campaigns.filter((c) => c.objective === "vacancy").reduce((s, c) => s + Number(c.spend), 0);
   const totalLeads = campaigns.reduce((s, c) => s + Number(c.leads), 0);
+  const totalImpr = campaigns.reduce((s, c) => s + Number(c.impressions), 0);
+  const totalClicks = campaigns.reduce((s, c) => s + Number(c.clicks), 0);
   const cpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
+  const cpm = totalImpr > 0 ? (totalSpend / totalImpr) * 1000 : 0;
+  const cpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
+  const ctr = totalImpr > 0 ? (totalClicks / totalImpr) * 100 : 0;
 
   const campPeriod =
     campaigns[0]?.period_from && campaigns[0]?.period_to
       ? `${formatDate(campaigns[0].period_from)} – ${formatDate(campaigns[0].period_to)}`
       : null;
 
+  const round2 = (v: number) => Math.round(v * 100) / 100;
   const campExport = campaigns.map((c) => [
     c.name,
     objectiveLabel(c.objective),
     c.status === "active" ? "Активна" : "Пауза",
+    c.leads,
+    c.leads > 0 ? round2(c.spend / c.leads) : 0, // CPL $
+    c.impressions > 0 ? round2((c.spend / c.impressions) * 1000) : 0, // CPM $
+    c.clicks > 0 ? round2(c.spend / c.clicks) : 0, // CPC $
+    c.impressions > 0 ? `${((c.clicks / c.impressions) * 100).toFixed(2)}%` : "—", // CTR
+    c.reach,
     c.impressions,
     c.clicks,
-    c.impressions > 0 ? `${((c.clicks / c.impressions) * 100).toFixed(2)}%` : "—",
-    c.reach,
-    c.leads,
-    c.leads > 0 ? Math.round(c.spend / c.leads) : 0,
-    Math.round(c.spend),
+    round2(c.spend), // Потрачено $
   ]);
 
   return (
@@ -82,6 +90,15 @@ export default async function AdsPage({
           tone="ink"
         />
       </div>
+
+      {campaigns.length > 0 && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <Metric label="CPL · за лид" value={formatUsd(cpl, 2)} />
+          <Metric label="CPM · за 1000 показов" value={formatUsd(cpm, 2)} />
+          <Metric label="CPC · за клик" value={formatUsd(cpc, 2)} />
+          <Metric label="CTR" value={formatPercent(ctr)} />
+        </div>
+      )}
 
       {/* Два рекламных кабинета: курс и вакансии */}
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -118,12 +135,21 @@ export default async function AdsPage({
         {campaigns.length > 0 && (
           <ExportButton
             filename={`kampanii-${projectId.slice(0, 8)}`}
-            headers={["Кампания", "Цель", "Статус", "Показы", "Клики", "CTR", "Охват", "Результаты", "Цена за результат", "Потрачено"]}
+            headers={["Кампания", "Цель", "Статус", "Лиды", "CPL $", "CPM $", "CPC $", "CTR", "Охват", "Показы", "Клики", "Потрачено $"]}
             rows={campExport}
           />
         )}
       </div>
       <CampaignsTable rows={campaigns} />
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="inline-flex items-baseline gap-2 rounded-xl bg-surface px-3.5 py-2 shadow-soft ring-1 ring-line">
+      <span className="text-xs text-muted">{label}</span>
+      <span className="text-sm font-bold text-ink">{value}</span>
     </div>
   );
 }

@@ -33,6 +33,7 @@ export function MetaIntegration({
   const [pending, startTransition] = useTransition();
   const [account, setAccount] = useState("");
   const [token, setToken] = useState("");
+  const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   const inputCls =
@@ -83,8 +84,23 @@ export function MetaIntegration({
     </span>
   );
 
-  /* ─────────── Не подключено: форма ─────────── */
+  /* ─────────── Не подключено: компактная кнопка → форма ─────────── */
   if (!status) {
+    if (!open) {
+      return (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex h-full min-h-[120px] w-full flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-line bg-surface p-6 text-center transition hover:border-brand/50 hover:bg-canvas"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
+            <Plug className="h-5 w-5" />
+          </span>
+          <span className="text-sm font-semibold text-ink">+ Подключить кабинет · {title}</span>
+          <span className="text-xs text-muted">Расходы и кампании подтянутся автоматически</span>
+        </button>
+      );
+    }
     return (
       <div className="flex h-full flex-col rounded-card border border-dashed border-line bg-surface p-5">
         <div className="mb-3 flex items-center gap-2">
@@ -92,6 +108,13 @@ export function MetaIntegration({
             <Plug className="h-5 w-5" />
           </span>
           <div className="text-sm font-semibold text-ink">Кабинет Meta · {title}</div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="ml-auto text-xs text-muted hover:text-ink"
+          >
+            Свернуть
+          </button>
         </div>
         <p className="mb-3 text-xs text-muted">
           Токен (System User Token) хранится только на сервере в зашифрованном виде.
