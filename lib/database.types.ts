@@ -390,6 +390,36 @@ export type Database = {
         }
         Relationships: []
       }
+      work_schedules: {
+        Row: {
+          days: number[]
+          end_time: string
+          id: string
+          project_id: string
+          start_time: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          days?: number[]
+          end_time?: string
+          id?: string
+          project_id: string
+          start_time?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          days?: number[]
+          end_time?: string
+          id?: string
+          project_id?: string
+          start_time?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -400,6 +430,16 @@ export type Database = {
       create_employee: {
         Args: { p_project_id: string; p_full_name: string; p_role: string }
         Returns: Json
+      }
+      set_work_schedule: {
+        Args: {
+          p_project_id: string
+          p_user_id: string
+          p_days: number[]
+          p_start: string
+          p_end: string
+        }
+        Returns: undefined
       }
     }
     Enums: {

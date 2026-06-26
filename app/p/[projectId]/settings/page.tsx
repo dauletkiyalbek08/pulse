@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProject, requireAccess } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
-import { getMenu } from "@/lib/menu";
-import { filterMenuByRole } from "@/lib/access";
 import { rolesForNiche, roleLabel } from "@/lib/members";
 import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/pill";
@@ -53,39 +51,17 @@ export default async function SettingsPage({
         <NewEmployeeForm projectId={projectId} roles={rolesForNiche(niche.key)} />
       </section>
 
-      {/* Кто что видит */}
-      <section className="mb-8">
-        <h2 className="mb-1 text-base font-semibold text-ink">Доступы по ролям</h2>
-        <p className="mb-4 text-sm text-muted">
-          Какие разделы видит каждая роль. Финансы и настройки скрыты от
-          маркетинга и продаж.
-        </p>
-        <div className="overflow-x-auto rounded-card bg-surface shadow-soft ring-1 ring-line">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
-                <th className="px-5 py-3 font-medium">Роль</th>
-                <th className="px-5 py-3 font-medium">Доступные разделы</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rolesForNiche(niche.key).map((r) => {
-                const visible = filterMenuByRole(getMenu(niche.key), r)
-                  .map((s) => s.title)
-                  .join(" · ");
-                return (
-                  <tr key={r} className="border-b border-line last:border-0">
-                    <td className="px-5 py-3">
-                      <Pill tone="info">{roleLabel(r)}</Pill>
-                    </td>
-                    <td className="px-5 py-3 text-muted">{visible || "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {/* Матрица доступа переехала на отдельную страницу «Права доступа» */}
+      <p className="mb-8 rounded-card bg-canvas px-4 py-3 text-sm text-muted">
+        Кто какие разделы видит и что может делать — на странице{" "}
+        <a
+          href={`/p/${projectId}/access`}
+          className="font-medium text-brand-ink hover:underline"
+        >
+          Права доступа
+        </a>
+        .
+      </p>
 
       {/* Активные сотрудники */}
       <section className="mb-8">
