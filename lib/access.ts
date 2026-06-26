@@ -11,8 +11,9 @@ import type { MenuSection } from "@/lib/menu";
 
 const SALES_CRM = ["leads", "funnel", "trials", "sales", "clients", "calls", "team"];
 const MARKETING = ["ads", "creatives", "marketing", "smm", "capi", "resources", "ai"];
-const FINANCE = ["finance", "salaries", "contracts"];
-const BASE = ["", "attendance"];
+const FINANCE = ["finance", "contracts"];
+// Главная, посещаемость и «своя зарплата» доступны каждому сотруднику.
+const BASE = ["", "attendance", "salaries"];
 
 /** "*" = полный доступ. */
 const ACCESS: Record<string, string[]> = {
@@ -77,8 +78,9 @@ export const ACTION_MATRIX: { label: string; roles: string[] }[] = [
   { label: "Видит CRM-воронку", roles: ["director", "head_sales", "manager", "hunter"] },
   { label: "Анализ звонков", roles: ["director", "head_sales", "manager", "hunter"] },
   { label: "Видит рекламу и CAPI", roles: ["director", "marketer", "targetologist"] },
-  { label: "Видит финансы", roles: ["director", "accountant"] },
-  { label: "Видит зарплаты", roles: ["director", "accountant"] },
+  { label: "Видит финансы (ведомость)", roles: ["director", "accountant"] },
+  { label: "Видит свою зарплату", roles: [...ROLE_ORDER] },
+  { label: "Управляет зарплатами команды", roles: ["director", "accountant"] },
   { label: "Управляет графиками команды", roles: ["director", "head_sales", "marketer"] },
   { label: "Управляет доступом и сотрудниками", roles: ["director"] },
 ];

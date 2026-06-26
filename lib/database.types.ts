@@ -39,6 +39,99 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_entries: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          note: string | null
+          project_id: string
+          spent_on: string
+          title: string
+        }
+        Insert: {
+          amount?: number
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          project_id: string
+          spent_on?: string
+          title: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          project_id?: string
+          spent_on?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      payroll: {
+        Row: {
+          base_salary: number
+          bonus: number
+          created_at: string
+          days_planned: number
+          days_worked: number
+          deduction: number
+          id: string
+          kpi_bonus: number
+          note: string | null
+          period: string
+          project_id: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          base_salary?: number
+          bonus?: number
+          created_at?: string
+          days_planned?: number
+          days_worked?: number
+          deduction?: number
+          id?: string
+          kpi_bonus?: number
+          note?: string | null
+          period: string
+          project_id: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          base_salary?: number
+          bonus?: number
+          created_at?: string
+          days_planned?: number
+          days_worked?: number
+          deduction?: number
+          id?: string
+          kpi_bonus?: number
+          note?: string | null
+          period?: string
+          project_id?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           accepted_at: string | null
@@ -508,6 +601,7 @@ export type Database = {
     Functions: {
       is_owner: { Args: Record<string, never>; Returns: boolean }
       is_project_member: { Args: { pid: string }; Returns: boolean }
+      can_manage_finance: { Args: { pid: string }; Returns: boolean }
       create_employee: {
         Args: { p_project_id: string; p_full_name: string; p_role: string }
         Returns: Json
