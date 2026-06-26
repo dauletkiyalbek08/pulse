@@ -6,7 +6,7 @@ import { Avatar } from "@/components/avatar";
 import { Pill } from "@/components/pill";
 import { getLeadStatusMeta, leadStatusOrder, sourceLabel } from "@/lib/leads";
 import type { Niche } from "@/lib/niches";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDateTime } from "@/lib/format";
 
 export interface LeadRow {
   id: string;
@@ -103,7 +103,7 @@ export function LeadsTable({ rows, niche }: { rows: LeadRow[]; niche: Niche }) {
                 <th className="px-5 py-3 font-medium">Ответственный</th>
                 <th className="px-5 py-3 font-medium">Статус</th>
                 <th className="px-5 py-3 text-right font-medium">Сумма</th>
-                <th className="px-5 py-3 font-medium">Заявка</th>
+                <th className="px-5 py-3 font-medium">Пришёл</th>
               </tr>
             </thead>
             <tbody>
@@ -140,7 +140,9 @@ export function LeadsTable({ rows, niche }: { rows: LeadRow[]; niche: Niche }) {
                         ? formatCurrency(Number(lead.value))
                         : "—"}
                     </td>
-                    <td className="px-5 py-3 text-muted">{formatDate(lead.created_at)}</td>
+                    <td className="px-5 py-3 whitespace-nowrap text-muted">
+                      {formatDateTime(lead.created_at)}
+                    </td>
                   </tr>
                 );
               })}

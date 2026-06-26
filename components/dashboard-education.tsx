@@ -16,6 +16,7 @@ import { RevenueChart } from "@/components/revenue-chart";
 import { FunnelCard } from "@/components/funnel-card";
 import { TopList } from "@/components/top-list";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { getCohortFunnel } from "@/lib/funnel";
 import type { DateRange } from "@/lib/date-range";
 
 const QUALIFYING_STATUSES = ["qualified", "trial", "sale"];
@@ -39,23 +40,29 @@ export async function DashboardEducation({
 }) {
   const supabase = await createClient();
 
-  const [{ data: metrics }, { data: members }, { data: sales }, { data: leads }] =
-    await Promise.all([
-      supabase
-        .from("metrics_daily")
-        .select("*")
-        .eq("project_id", projectId)
-        .gte("date", range.from)
-        .lte("date", range.to)
-        .order("date", { ascending: true }),
-      supabase
-        .from("project_members")
-        .select("user_id, role")
-        .eq("project_id", projectId)
-        .eq("status", "active"),
-      supabase.from("sales").select("manager_id, amount").eq("project_id", projectId),
-      supabase.from("leads").select("assigned_to, status").eq("project_id", projectId),
-    ]);
+  const [
+    { data: metrics },
+    { data: members },
+    { data: sales },
+    { data: leads },
+    funnelStages,
+  ] = await Promise.all([
+    supabase
+      .from("metrics_daily")
+      .select("*")
+      .eq("project_id", projectId)
+      .gte("date", range.from)
+      .lte("date", range.to)
+      .order("date", { ascending: true }),
+    supabase
+      .from("project_members")
+      .select("user_id, role")
+      .eq("project_id", projectId)
+      .eq("status", "active"),
+    supabase.from("sales").select("manager_id, amount").eq("project_id", projectId),
+    supabase.from("leads").select("assigned_to, status").eq("project_id", projectId),
+    getCohortFunnel(projectId, "education", range),
+  ]);
 
   const rows = metrics ?? [];
   const agg = aggregateMetrics(rows);
@@ -99,12 +106,6 @@ export async function DashboardEducation({
       name: nameById.get(id) ?? "—",
       value: `${formatNumber(count)} ${pluralLeads(count)}`,
     }));
-
-  const funnelStages = [
-    { label: "Лиды", value: agg.leads },
-    { label: "Пробные уроки", value: agg.trialLessons },
-    { label: "Продажи курса", value: agg.sales },
-  ];
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -153,7 +154,10 @@ export async function DashboardEducation({
           </div>
         </div>
         <div className="rounded-card bg-surface p-6 shadow-soft ring-1 ring-line">
-          <h2 className="mb-5 text-base font-semibold text-ink">Воронка</h2>
+          <h2 className="text-base font-semibold text-ink">Воронка по лидам</h2>
+          <p className="mb-5 mt-0.5 text-xs text-faint">
+            Из лидов за период «{range.label.toLowerCase()}» — сколько дошло до этапа
+          </p>
           <FunnelCard stages={funnelStages} />
         </div>
       </div>
