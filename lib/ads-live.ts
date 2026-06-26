@@ -5,7 +5,7 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptSecret } from "@/lib/crypto";
-import { fetchMetaEntities, type AdLevel } from "@/lib/meta";
+import { fetchMetaEntities, guessObjective, type AdLevel } from "@/lib/meta";
 import type { CampaignRow } from "@/components/campaigns-table";
 
 export interface LiveAds {
@@ -36,11 +36,14 @@ export async function getLiveAds(
   const errors: string[] = [];
 
   for (const ig of integs) {
-    const objective = ig.purpose === "vacancy" ? "vacancy" : "course";
+    const cabinetPurpose = ig.purpose === "vacancy" ? "vacancy" : "course";
     try {
       const token = decryptSecret(ig.token_enc);
       const camps = await fetchMetaEntities(ig.ad_account_id, token, level, since, until);
       for (const c of camps) {
+        // Кабинет «Вакансии» → всё вакансии; кабинет «Курс» → делим по названию
+        // (вакан/VAC/vacancy → вакансии, иначе курс).
+        const objective = cabinetPurpose === "vacancy" ? "vacancy" : guessObjective(c.name);
         campaigns.push({
           id: c.externalId || `${objective}-${c.name}`,
           name: c.name,
@@ -60,7 +63,7 @@ export async function getLiveAds(
         .eq("purpose", ig.purpose);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "ошибка";
-      errors.push(`${objective === "vacancy" ? "Вакансии" : "Курс"}: ${msg}`);
+      errors.push(`${cabinetPurpose === "vacancy" ? "Вакансии" : "Курс"}: ${msg}`);
       await admin
         .from("meta_integration")
         .update({ status: "error", last_error: msg })

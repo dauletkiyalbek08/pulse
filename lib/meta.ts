@@ -121,7 +121,9 @@ export async function fetchMetaInsights(
 
 /** Эвристика цели кампании по названию: вакансии vs курс. */
 export function guessObjective(campaign: string): "course" | "vacancy" {
-  return /вакан|ваканс|hr|job|рекрут|hiring|резюме|сотрудн/i.test(campaign) ? "vacancy" : "course";
+  return /вакан|vac|vacancy|hr|job|рекрут|hiring|резюме|сотрудн/i.test(campaign)
+    ? "vacancy"
+    : "course";
 }
 
 export interface MetaCampaign {
