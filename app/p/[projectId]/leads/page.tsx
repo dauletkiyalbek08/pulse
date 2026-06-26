@@ -1,26 +1,38 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProject } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
+import { getCohortFunnel } from "@/lib/funnel";
+import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
+import { formatNumber } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { NewLeadForm } from "@/components/new-lead-form";
 import { LeadsTable, type LeadRow } from "@/components/leads-table";
 
 export default async function LeadsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { projectId } = await params;
+  const range = rangeFromSearchParams(await searchParams);
 
   const supabase = await createClient();
   const project = await getProject(projectId);
   const niche = getNiche(project?.niche);
 
-  const { data: leads } = await supabase
-    .from("leads")
-    .select("id, full_name, phone, source, status, assigned_to, value, created_at")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: false });
+  const [{ data: leads }, funnel] = await Promise.all([
+    supabase
+      .from("leads")
+      .select("id, full_name, phone, source, status, assigned_to, value, created_at")
+      .eq("project_id", projectId)
+      .gte("created_at", range.from)
+      .lt("created_at", rangeEndExclusive(range))
+      .order("created_at", { ascending: false }),
+    getCohortFunnel(projectId, niche.key, range),
+  ]);
   const leadRows = leads ?? [];
 
   const assigneeIds = [
@@ -44,7 +56,28 @@ export default async function LeadsPage({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <PageHeader title="Лиды" subtitle={`CRM · ${rows.length} лидов`} />
+      <PageHeader title="Лиды" subtitle={`Период: ${range.label}`}>
+        <DateRangePicker
+          preset={range.preset}
+          from={range.from}
+          to={range.to}
+          label={range.label}
+        />
+      </PageHeader>
+
+      <div className="mb-6 flex flex-wrap gap-2.5">
+        {funnel.map((step) => (
+          <div
+            key={step.label}
+            className="rounded-xl bg-surface px-4 py-2.5 shadow-soft ring-1 ring-line"
+          >
+            <div className="text-xs text-muted">{step.label}</div>
+            <div className="mt-0.5 text-lg font-bold text-ink">
+              {formatNumber(step.value)}
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className="mb-4">
         <NewLeadForm projectId={projectId} />

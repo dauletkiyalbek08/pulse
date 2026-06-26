@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProject } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
+import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
 import { PageHeader } from "@/components/page-header";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { Pill } from "@/components/pill";
 import type { PillTone } from "@/lib/leads";
 import { formatDateTime } from "@/lib/format";
@@ -17,10 +19,13 @@ const STATUS_ORDER = ["scheduled", "attended", "no_show", "purchased"];
 
 export default async function TrialsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { projectId } = await params;
+  const range = rangeFromSearchParams(await searchParams);
 
   const supabase = await createClient();
   const project = await getProject(projectId);
@@ -41,6 +46,8 @@ export default async function TrialsPage({
     .from("trials")
     .select("id, full_name, phone, scheduled_at, status, assigned_to")
     .eq("project_id", projectId)
+    .gte("scheduled_at", range.from)
+    .lt("scheduled_at", rangeEndExclusive(range))
     .order("scheduled_at", { ascending: false });
   const rows = trials ?? [];
 
@@ -57,7 +64,17 @@ export default async function TrialsPage({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <PageHeader title="Пробные уроки" subtitle={`Записей: ${rows.length}`} />
+      <PageHeader
+        title="Пробные уроки"
+        subtitle={`Период: ${range.label} · записей: ${rows.length}`}
+      >
+        <DateRangePicker
+          preset={range.preset}
+          from={range.from}
+          to={range.to}
+          label={range.label}
+        />
+      </PageHeader>
 
       <div className="mb-5 flex flex-wrap gap-2">
         {STATUS_ORDER.map((status) => {

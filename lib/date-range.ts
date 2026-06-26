@@ -136,3 +136,29 @@ export function rangeDays(range: DateRange): number {
   const to = new Date(range.to);
   return Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
 }
+
+/**
+ * Резолвит диапазон прямо из объекта searchParams страницы
+ * (`{ [key]: string | string[] | undefined }`), убирая копипаст в каждом роуте.
+ */
+export function rangeFromSearchParams(sp: {
+  [key: string]: string | string[] | undefined;
+}): DateRange {
+  const str = (v: string | string[] | undefined) =>
+    typeof v === "string" ? v : undefined;
+  return resolveDateRange({
+    range: str(sp.range),
+    from: str(sp.from),
+    to: str(sp.to),
+  });
+}
+
+/**
+ * Первая дата ПОСЛЕ диапазона (YYYY-MM-DD) — для фильтра по timestamptz:
+ * `created_at >= range.from and created_at < rangeEndExclusive(range)`.
+ */
+export function rangeEndExclusive(range: DateRange): string {
+  const d = new Date(`${range.to}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}

@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProject } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
+import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
 import { getLeadStatusMeta, leadStatusOrder, sourceLabel } from "@/lib/leads";
 import type { PillTone } from "@/lib/leads";
 import { PageHeader } from "@/components/page-header";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { Avatar } from "@/components/avatar";
 import { formatCurrency } from "@/lib/format";
 
@@ -25,10 +27,13 @@ const DOT: Record<PillTone, string> = {
 
 export default async function FunnelPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { projectId } = await params;
+  const range = rangeFromSearchParams(await searchParams);
 
   const supabase = await createClient();
   const project = await getProject(projectId);
@@ -38,6 +43,8 @@ export default async function FunnelPage({
     .from("leads")
     .select("id, full_name, source, status, value")
     .eq("project_id", projectId)
+    .gte("created_at", range.from)
+    .lt("created_at", rangeEndExclusive(range))
     .order("created_at", { ascending: false });
   const rows = leads ?? [];
 
@@ -51,18 +58,28 @@ export default async function FunnelPage({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <PageHeader title="CRM-воронка" subtitle={`Воронка: ${niche.funnel.join(" → ")}`}>
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-muted">
-            В воронке:{" "}
-            <span className="font-semibold text-ink">{formatCurrency(pipelineTotal)}</span>
-          </span>
-          <span className="text-muted">
-            Продажи:{" "}
-            <span className="font-semibold text-brand-ink">{formatCurrency(closedTotal)}</span>
-          </span>
-        </div>
+      <PageHeader
+        title="CRM-воронка"
+        subtitle={`${niche.funnel.join(" → ")} · период: ${range.label}`}
+      >
+        <DateRangePicker
+          preset={range.preset}
+          from={range.from}
+          to={range.to}
+          label={range.label}
+        />
       </PageHeader>
+
+      <div className="mb-5 flex flex-wrap items-center gap-4 text-sm">
+        <span className="text-muted">
+          В воронке:{" "}
+          <span className="font-semibold text-ink">{formatCurrency(pipelineTotal)}</span>
+        </span>
+        <span className="text-muted">
+          Продажи:{" "}
+          <span className="font-semibold text-brand-ink">{formatCurrency(closedTotal)}</span>
+        </span>
+      </div>
 
       <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${gridCols}`}>
         {statuses.map((status) => {
