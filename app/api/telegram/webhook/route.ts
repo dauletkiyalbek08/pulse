@@ -265,7 +265,7 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
   const link = chatId ? await findLink(admin, chatId) : null;
   const { data: lead } = await admin
     .from("leads")
-    .select("assigned_to, full_name, phone, source")
+    .select("assigned_to, status, full_name, phone, source")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -281,7 +281,14 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
       if (chatId && messageId) await editMessageText(chatId, messageId, "⏭ Лид передан другому хантеру.");
       return;
     }
-    await admin.from("leads").update({ accepted_at: new Date().toISOString() }).eq("id", leadId);
+    // Принятие двигает лид в воронке: Новый → Назначен
+    await admin
+      .from("leads")
+      .update({
+        accepted_at: new Date().toISOString(),
+        status: lead.status === "new" ? "assigned" : lead.status,
+      })
+      .eq("id", leadId);
     await answerCallback(cb.id, "✅ Лид принят");
     if (chatId && messageId) {
       await editMessageText(chatId, messageId, leadCardAccepted(lead), acceptedButtons(leadId));
