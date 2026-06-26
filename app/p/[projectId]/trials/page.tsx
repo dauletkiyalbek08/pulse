@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
-import { GraduationCap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getProject } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
 import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/pill";
@@ -24,16 +23,7 @@ export default async function TrialsPage({
   const { projectId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: project } = await supabase
-    .from("projects")
-    .select("niche")
-    .eq("id", projectId)
-    .maybeSingle();
+  const project = await getProject(projectId);
   const niche = getNiche(project?.niche);
 
   if (niche.key !== "education") {

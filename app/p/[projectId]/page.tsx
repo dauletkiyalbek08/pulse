@@ -1,10 +1,7 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getProject } from "@/lib/queries";
 import { resolveDateRange } from "@/lib/date-range";
 import { DashboardEducation } from "@/components/dashboard-education";
 import { DashboardEcommerce } from "@/components/dashboard-ecommerce";
-
-type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
 const str = (v: string | string[] | undefined) =>
   typeof v === "string" ? v : undefined;
@@ -14,7 +11,7 @@ export default async function Dashboard({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: SearchParams;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { projectId } = await params;
   const sp = await searchParams;
@@ -24,18 +21,9 @@ export default async function Dashboard({
     to: str(sp.to),
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: project } = await supabase
-    .from("projects")
-    .select("id, name, niche")
-    .eq("id", projectId)
-    .maybeSingle();
-  if (!project) return null; // доступ/наличие проверяет layout (notFound)
+  // Авторизация гарантирована middleware + layout; проект кэширован (общий с layout).
+  const project = await getProject(projectId);
+  if (!project) return null;
 
   return project.niche === "ecommerce" ? (
     <DashboardEcommerce

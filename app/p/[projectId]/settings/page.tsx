@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getProject } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
 import { rolesForNiche, roleLabel } from "@/lib/members";
 import { PageHeader } from "@/components/page-header";
@@ -16,16 +16,7 @@ export default async function SettingsPage({
   const { projectId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: project } = await supabase
-    .from("projects")
-    .select("niche")
-    .eq("id", projectId)
-    .maybeSingle();
+  const project = await getProject(projectId);
   const niche = getNiche(project?.niche);
 
   const { data: members } = await supabase

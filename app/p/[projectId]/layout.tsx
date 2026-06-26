@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getProject } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
 import { getMenu } from "@/lib/menu";
 import { Sidebar } from "@/components/sidebar";
@@ -20,12 +21,8 @@ export default async function ProjectLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: project }, { data: profile }] = await Promise.all([
-    supabase
-      .from("projects")
-      .select("id, name, niche, icon, accent_color")
-      .eq("id", projectId)
-      .maybeSingle(),
+  const [project, { data: profile }] = await Promise.all([
+    getProject(projectId),
     supabase
       .from("profiles")
       .select("full_name, global_role")

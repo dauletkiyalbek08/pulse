@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getProject } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
 import { PageHeader } from "@/components/page-header";
 import { NewLeadForm } from "@/components/new-lead-form";
@@ -13,16 +13,7 @@ export default async function LeadsPage({
   const { projectId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: project } = await supabase
-    .from("projects")
-    .select("niche")
-    .eq("id", projectId)
-    .maybeSingle();
+  const project = await getProject(projectId);
   const niche = getNiche(project?.niche);
 
   const { data: leads } = await supabase

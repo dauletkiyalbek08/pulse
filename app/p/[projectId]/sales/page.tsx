@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import {
   Banknote,
   TrendingDown,
@@ -36,10 +35,6 @@ export default async function SalesPage({
   const range = resolveDateRange({ range: str(sp.range), from: str(sp.from), to: str(sp.to) });
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   const [{ data: metrics }, { data: sales }] = await Promise.all([
     supabase

@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { Boxes, Package, AlertTriangle, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -14,10 +13,6 @@ export default async function ProductsPage({
   const { projectId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   const { data: products } = await supabase
     .from("products")
