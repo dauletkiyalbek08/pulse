@@ -78,6 +78,48 @@ export type Database = {
         }
         Relationships: []
       }
+      ad_spend: {
+        Row: {
+          amount: number
+          campaign: string
+          channel: string
+          created_at: string
+          created_by: string | null
+          id: string
+          leads: number
+          note: string | null
+          objective: string
+          project_id: string
+          spent_on: string
+        }
+        Insert: {
+          amount?: number
+          campaign: string
+          channel?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          leads?: number
+          note?: string | null
+          objective?: string
+          project_id: string
+          spent_on?: string
+        }
+        Update: {
+          amount?: number
+          campaign?: string
+          channel?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          leads?: number
+          note?: string | null
+          objective?: string
+          project_id?: string
+          spent_on?: string
+        }
+        Relationships: []
+      }
       payroll: {
         Row: {
           base_salary: number
@@ -602,6 +644,7 @@ export type Database = {
       is_owner: { Args: Record<string, never>; Returns: boolean }
       is_project_member: { Args: { pid: string }; Returns: boolean }
       can_manage_finance: { Args: { pid: string }; Returns: boolean }
+      can_manage_ads: { Args: { pid: string }; Returns: boolean }
       create_employee: {
         Args: { p_project_id: string; p_full_name: string; p_role: string }
         Returns: Json

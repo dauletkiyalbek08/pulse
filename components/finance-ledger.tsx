@@ -16,6 +16,8 @@ export interface LedgerRow {
   amount: number;
   spent_on: string;
   note: string | null;
+  /** Строка собрана из другого раздела (напр. «Реклама») — нельзя удалять здесь. */
+  locked?: boolean;
 }
 
 export function FinanceLedger({
@@ -80,19 +82,23 @@ export function FinanceLedger({
                   {income ? "+" : "−"} {formatCurrency(r.amount)}
                 </td>
                 <td className="px-5 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => remove(r.id)}
-                    disabled={pending && busyId === r.id}
-                    aria-label="Удалить"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-faint transition hover:bg-red-50 hover:text-red-600"
-                  >
-                    {pending && busyId === r.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                  </button>
+                  {r.locked ? (
+                    <span className="text-xs text-faint">из «Рекламы»</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => remove(r.id)}
+                      disabled={pending && busyId === r.id}
+                      aria-label="Удалить"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-faint transition hover:bg-red-50 hover:text-red-600"
+                    >
+                      {pending && busyId === r.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  )}
                 </td>
               </tr>
             );

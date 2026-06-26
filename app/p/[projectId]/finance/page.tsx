@@ -3,15 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAccess } from "@/lib/queries";
 import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
 import { localDay } from "@/lib/attendance";
+import { channelShort, objectiveLabel } from "@/lib/ads";
 import {
   categoryLabel,
   currentPeriod,
   periodLabel,
   payrollTotal,
+  kindLabel,
 } from "@/lib/finance";
 import { formatCurrency } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { ExportButton } from "@/components/export-button";
 import { FinanceForm } from "@/components/finance-form";
 import { FinanceLedger, type LedgerRow } from "@/components/finance-ledger";
 
@@ -29,30 +32,52 @@ export default async function FinancePage({
   const supabase = await createClient();
   const period = currentPeriod();
 
-  const [{ data: entries }, { data: salesRows }, { data: payrolls }] = await Promise.all([
-    supabase
-      .from("finance_entries")
-      .select("id, kind, category, title, amount, spent_on, note")
-      .eq("project_id", projectId)
-      .gte("spent_on", range.from)
-      .lte("spent_on", range.to)
-      .order("spent_on", { ascending: false }),
-    supabase
-      .from("sales")
-      .select("amount")
-      .eq("project_id", projectId)
-      .gte("created_at", range.from)
-      .lt("created_at", rangeEndExclusive(range)),
-    supabase
-      .from("payroll")
-      .select("base_salary, days_planned, days_worked, kpi_bonus, bonus, deduction")
-      .eq("project_id", projectId)
-      .eq("period", period),
-  ]);
+  const [{ data: entries }, { data: adRows }, { data: salesRows }, { data: payrolls }] =
+    await Promise.all([
+      supabase
+        .from("finance_entries")
+        .select("id, kind, category, title, amount, spent_on, note")
+        .eq("project_id", projectId)
+        .gte("spent_on", range.from)
+        .lte("spent_on", range.to)
+        .order("spent_on", { ascending: false }),
+      supabase
+        .from("ad_spend")
+        .select("id, channel, objective, campaign, amount, spent_on")
+        .eq("project_id", projectId)
+        .gte("spent_on", range.from)
+        .lte("spent_on", range.to),
+      supabase
+        .from("sales")
+        .select("amount")
+        .eq("project_id", projectId)
+        .gte("created_at", range.from)
+        .lt("created_at", rangeEndExclusive(range)),
+      supabase
+        .from("payroll")
+        .select("base_salary, days_planned, days_worked, kpi_bonus, bonus, deduction")
+        .eq("project_id", projectId)
+        .eq("period", period),
+    ]);
 
-  const rows = (entries ?? []) as LedgerRow[];
-  const expenseTotal = rows.filter((r) => r.kind === "expense").reduce((s, r) => s + Number(r.amount), 0);
-  const incomeTotal = rows.filter((r) => r.kind === "income").reduce((s, r) => s + Number(r.amount), 0);
+  const manual = (entries ?? []) as LedgerRow[];
+
+  // Расходы на рекламу собираются из раздела «Реклама» как заблокированные строки
+  const adAsLedger: LedgerRow[] = (adRows ?? []).map((a) => ({
+    id: a.id,
+    kind: "expense",
+    category: "ad_spend",
+    title: `${channelShort(a.channel)} · ${a.campaign}`,
+    amount: Number(a.amount),
+    spent_on: a.spent_on,
+    note: objectiveLabel(a.objective),
+    locked: true,
+  }));
+
+  const adSpendTotal = adAsLedger.reduce((s, r) => s + r.amount, 0);
+  const manualExpense = manual.filter((r) => r.kind === "expense").reduce((s, r) => s + Number(r.amount), 0);
+  const incomeTotal = manual.filter((r) => r.kind === "income").reduce((s, r) => s + Number(r.amount), 0);
+  const expenseTotal = manualExpense + adSpendTotal;
   const salesRevenue = (salesRows ?? []).reduce((s, r) => s + Number(r.amount), 0);
   const profit = salesRevenue + incomeTotal - expenseTotal;
 
@@ -70,9 +95,9 @@ export default async function FinancePage({
     0,
   );
 
-  // Разбивка расходов по категориям
+  // Структура расходов по категориям (с учётом рекламы)
   const byCategory = new Map<string, number>();
-  for (const r of rows) {
+  for (const r of [...manual, ...adAsLedger]) {
     if (r.kind !== "expense") continue;
     byCategory.set(r.category, (byCategory.get(r.category) ?? 0) + Number(r.amount));
   }
@@ -80,10 +105,29 @@ export default async function FinancePage({
     .map(([key, sum]) => ({ key, sum, pct: expenseTotal > 0 ? (sum / expenseTotal) * 100 : 0 }))
     .sort((a, b) => b.sum - a.sum);
 
+  // Единая ведомость: ручные операции + реклама, по дате
+  const ledger = [...manual, ...adAsLedger].sort((a, b) => (a.spent_on < b.spent_on ? 1 : -1));
+
+  const exportRows = ledger.map((r) => [
+    r.spent_on,
+    kindLabel(r.kind),
+    categoryLabel(r.category),
+    r.title,
+    r.kind === "income" ? Math.round(r.amount) : -Math.round(r.amount),
+    r.note ?? "",
+  ]);
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <PageHeader title="Финансы" subtitle={`Доходы и расходы агентства · период: ${range.label}`}>
-        <DateRangePicker preset={range.preset} from={range.from} to={range.to} label={range.label} />
+        <div className="flex items-center gap-2">
+          <ExportButton
+            filename={`finansy-${range.from}_${range.to}`}
+            headers={["Дата", "Тип", "Категория", "Операция", "Сумма", "Комментарий"]}
+            rows={exportRows}
+          />
+          <DateRangePicker preset={range.preset} from={range.from} to={range.to} label={range.label} />
+        </div>
       </PageHeader>
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -97,6 +141,16 @@ export default async function FinancePage({
         />
         <StatCard label={`Зарплаты · ${periodLabel(period)}`} value={formatCurrency(payrollFund)} icon={Users} tone="ink" />
       </div>
+
+      <p className="mb-6 rounded-card bg-canvas px-4 py-3 text-sm text-muted">
+        Расход на рекламу за период:{" "}
+        <span className="font-semibold text-ink">{formatCurrency(adSpendTotal)}</span> — собран
+        автоматически из раздела{" "}
+        <a href={`/p/${projectId}/ads`} className="font-medium text-brand-ink hover:underline">
+          «Реклама»
+        </a>
+        .
+      </p>
 
       <div className="mb-6">
         <FinanceForm projectId={projectId} today={localDay()} />
@@ -122,7 +176,7 @@ export default async function FinancePage({
       )}
 
       <h2 className="mb-3 text-base font-semibold text-ink">Операции</h2>
-      <FinanceLedger projectId={projectId} rows={rows} />
+      <FinanceLedger projectId={projectId} rows={ledger} />
     </div>
   );
 }

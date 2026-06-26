@@ -17,6 +17,7 @@ import { formatCurrency } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/pill";
 import { MonthPicker } from "@/components/month-picker";
+import { ExportButton } from "@/components/export-button";
 import { PayrollRow } from "@/components/payroll-row";
 import type { PayrollForm } from "@/app/p/[projectId]/salaries/actions";
 
@@ -173,13 +174,37 @@ export default async function SalariesPage({
   const fund = rows.reduce((s, r) => s + r.total, 0);
   const paid = rows.filter((r) => r.status === "paid").reduce((s, r) => s + r.total, 0);
 
+  const exportRows = rows.map((r) => [
+    r.name,
+    roleLabel(r.role),
+    Math.round(r.form.base_salary),
+    r.form.days_planned,
+    r.form.days_worked,
+    accruedBase(r.form.base_salary, r.form.days_planned, r.form.days_worked),
+    Math.round(r.form.kpi_bonus),
+    Math.round(r.form.bonus),
+    Math.round(r.form.deduction),
+    r.total,
+    (PAYROLL_STATUS[r.status] ?? PAYROLL_STATUS.draft).label,
+  ]);
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <PageHeader
         title="Зарплаты"
         subtitle="Оклад, KPI и отработанные дни по каждому сотруднику"
       >
-        <MonthPicker period={period} />
+        <div className="flex items-center gap-2">
+          <ExportButton
+            filename={`zarplata-${period}`}
+            headers={[
+              "Сотрудник", "Роль", "Оклад", "План дней", "Отработано",
+              "Оклад по дням", "KPI", "Бонус", "Удержание", "К выплате", "Статус",
+            ]}
+            rows={exportRows}
+          />
+          <MonthPicker period={period} />
+        </div>
       </PageHeader>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
