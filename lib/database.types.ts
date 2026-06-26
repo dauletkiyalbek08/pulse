@@ -90,6 +90,7 @@ export type Database = {
           note: string | null
           objective: string
           project_id: string
+          source: string
           spent_on: string
         }
         Insert: {
@@ -103,6 +104,7 @@ export type Database = {
           note?: string | null
           objective?: string
           project_id: string
+          source?: string
           spent_on?: string
         }
         Update: {
@@ -116,7 +118,47 @@ export type Database = {
           note?: string | null
           objective?: string
           project_id?: string
+          source?: string
           spent_on?: string
+        }
+        Relationships: []
+      }
+      meta_integration: {
+        Row: {
+          ad_account_id: string
+          connected_by: string | null
+          created_at: string
+          currency: string
+          kzt_rate: number
+          last_error: string | null
+          last_synced_at: string | null
+          project_id: string
+          status: string
+          token_enc: string
+        }
+        Insert: {
+          ad_account_id: string
+          connected_by?: string | null
+          created_at?: string
+          currency?: string
+          kzt_rate?: number
+          last_error?: string | null
+          last_synced_at?: string | null
+          project_id: string
+          status?: string
+          token_enc: string
+        }
+        Update: {
+          ad_account_id?: string
+          connected_by?: string | null
+          created_at?: string
+          currency?: string
+          kzt_rate?: number
+          last_error?: string | null
+          last_synced_at?: string | null
+          project_id?: string
+          status?: string
+          token_enc?: string
         }
         Relationships: []
       }

@@ -1,4 +1,4 @@
-import { Megaphone, GraduationCap, Briefcase, Users, Plug } from "lucide-react";
+import { Megaphone, GraduationCap, Briefcase, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccess } from "@/lib/queries";
 import { rangeFromSearchParams } from "@/lib/date-range";
@@ -10,6 +10,8 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { ExportButton } from "@/components/export-button";
 import { AdSpendForm } from "@/components/ad-spend-form";
 import { AdSpendList, type AdRow } from "@/components/ad-spend-list";
+import { MetaIntegration } from "@/components/meta-integration";
+import { getMetaStatus } from "@/app/p/[projectId]/ads/integration-actions";
 
 export default async function AdsPage({
   params,
@@ -30,6 +32,8 @@ export default async function AdsPage({
     .gte("spent_on", range.from)
     .lte("spent_on", range.to)
     .order("spent_on", { ascending: false });
+
+  const metaStatus = await getMetaStatus(projectId);
 
   const rows = (data ?? []) as AdRow[];
   const total = rows.reduce((s, r) => s + Number(r.amount), 0);
@@ -81,28 +85,15 @@ export default async function AdsPage({
         />
       </div>
 
-      {/* Подключение рекламного кабинета (реальная интеграция — на этапе интеграций) */}
-      <div className="mb-6 flex flex-col gap-3 rounded-card border border-dashed border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
-            <Plug className="h-5 w-5" />
-          </span>
-          <div>
-            <div className="text-sm font-semibold text-ink">Рекламный кабинет Meta Ads</div>
-            <p className="mt-0.5 max-w-xl text-sm text-muted">
-              После подключения расходы и лиды будут подтягиваться автоматически. Токен
-              доступа хранится только на сервере. Пока вносите расходы вручную ниже — они
-              сразу попадают в «Финансы».
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          disabled
-          className="shrink-0 cursor-not-allowed rounded-lg bg-canvas px-4 py-2 text-sm font-medium text-faint ring-1 ring-line"
-        >
-          Скоро
-        </button>
+      {/* Подключение рекламного кабинета Meta Ads */}
+      <div className="mb-6">
+        <MetaIntegration
+          projectId={projectId}
+          status={metaStatus}
+          rangeFrom={range.from}
+          rangeTo={range.to}
+          rangeLabel={range.label}
+        />
       </div>
 
       <div className="mb-6">
