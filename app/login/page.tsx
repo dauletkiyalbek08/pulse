@@ -1,13 +1,34 @@
 "use client";
 
-import { useActionState } from "react";
-import { Activity, Loader2 } from "lucide-react";
+import { useActionState, useState } from "react";
+import { Activity, Loader2, Users } from "lucide-react";
 import { login, type LoginState } from "./actions";
 
 const initialState: LoginState = { error: null };
 
+/** Демо-входы: один клик подставляет логин/пароль, дальше жмёшь «Войти». */
+const DEMO_PASSWORD = "demo1234";
+const DEMO_ACCOUNTS: { label: string; email: string }[] = [
+  { label: "Директор", email: "director@demo.pulse" },
+  { label: "Руководитель продаж", email: "head_sales@demo.pulse" },
+  { label: "Менеджер", email: "manager@demo.pulse" },
+  { label: "Хантер", email: "hunter@demo.pulse" },
+  { label: "Учитель", email: "teacher@demo.pulse" },
+  { label: "Маркетолог", email: "marketer@demo.pulse" },
+  { label: "Таргетолог", email: "targetologist@demo.pulse" },
+  { label: "SMM", email: "smm@demo.pulse" },
+  { label: "Бухгалтер", email: "accountant@demo.pulse" },
+];
+
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(login, initialState);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  function fillDemo(demoEmail: string) {
+    setEmail(demoEmail);
+    setPassword(DEMO_PASSWORD);
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-12">
@@ -37,6 +58,8 @@ export default function LoginPage() {
             type="email"
             autoComplete="email"
             required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             className="mt-1.5 w-full rounded-xl border border-line bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-faint focus:border-brand focus:bg-surface focus:outline-none"
           />
@@ -53,6 +76,8 @@ export default function LoginPage() {
             type="password"
             autoComplete="current-password"
             required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             className="mt-1.5 w-full rounded-xl border border-line bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-faint focus:border-brand focus:bg-surface focus:outline-none"
           />
@@ -72,6 +97,36 @@ export default function LoginPage() {
             {pending ? "Вход..." : "Войти"}
           </button>
         </form>
+
+        {/* Быстрый вход под разными ролями (демо) */}
+        <div className="mt-6 rounded-card bg-surface p-5 shadow-soft ring-1 ring-line">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+            <Users className="h-4 w-4 text-brand-ink" />
+            Быстрый вход (демо)
+          </div>
+          <p className="mb-3 text-xs text-muted">
+            Нажми роль — логин и пароль подставятся. Затем нажми «Войти».
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {DEMO_ACCOUNTS.map((acc) => {
+              const selected = email === acc.email;
+              return (
+                <button
+                  key={acc.email}
+                  type="button"
+                  onClick={() => fillDemo(acc.email)}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
+                    selected
+                      ? "border-brand bg-brand-soft font-medium text-brand-ink"
+                      : "border-line bg-canvas text-ink hover:border-brand/40 hover:bg-brand-soft/40"
+                  }`}
+                >
+                  {acc.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
