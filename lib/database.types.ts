@@ -503,6 +503,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      fire_member: {
+        Args: { p_member_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

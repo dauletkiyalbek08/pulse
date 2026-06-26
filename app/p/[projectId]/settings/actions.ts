@@ -101,30 +101,8 @@ export async function fireEmployee(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: member } = await supabase
-    .from("project_members")
-    .select("user_id, role")
-    .eq("id", memberId)
-    .maybeSingle();
-
-  const { error } = await supabase
-    .from("project_members")
-    .update({ status: "fired", fired_at: new Date().toISOString() })
-    .eq("id", memberId);
-
-  if (!error) {
-    // Журнал действий (ТЗ, раздел 3.4)
-    await supabase.from("activity_log").insert({
-      project_id: projectId,
-      actor_id: user.id,
-      action: "member.fired",
-      details: {
-        member_id: memberId,
-        user_id: member?.user_id ?? null,
-        role: member?.role ?? null,
-      },
-    });
-  }
+  // Увольнение + запись в журнал — внутри RPC (проверка прав, обход RLS)
+  await supabase.rpc("fire_member", { p_member_id: memberId });
 
   revalidatePath(`/p/${projectId}/settings`);
 }
