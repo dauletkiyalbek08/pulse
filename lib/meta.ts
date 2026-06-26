@@ -5,15 +5,28 @@
 
 const GRAPH = "https://graph.facebook.com/v23.0";
 
-/** Типы действий, которые считаем «лидом» (lead ads, формы, Pixel). */
-const LEAD_ACTION_TYPES = new Set([
+/**
+ * Лиды: Meta в `actions` отдаёт один и тот же лид под разными именами
+ * (`lead` == `onsite_conversion.lead_grouped`). Поэтому НЕ суммируем, а берём
+ * ОДИН канонический показатель по приоритету (как «Результат» в Ads Manager).
+ */
+const LEAD_PRIORITY = [
   "lead",
-  "leadgen.other",
-  "leadgen_grouped",
   "onsite_conversion.lead_grouped",
+  "leadgen_grouped",
+  "leadgen.other",
   "offsite_conversion.fb_pixel_lead",
   "onsite_web_lead",
-]);
+];
+
+function pickLeads(actions?: { action_type: string; value: string }[]): number {
+  if (!actions) return 0;
+  for (const t of LEAD_PRIORITY) {
+    const found = actions.find((a) => a.action_type === t);
+    if (found) return Math.round(Number(found.value || 0));
+  }
+  return 0;
+}
 
 export interface MetaAccount {
   name: string;
@@ -93,9 +106,7 @@ export async function fetchMetaInsights(
       throw new Error(json.error?.message ?? "Ошибка запроса к Meta Insights");
     }
     for (const r of json.data ?? []) {
-      const leads = (r.actions ?? [])
-        .filter((a) => LEAD_ACTION_TYPES.has(a.action_type))
-        .reduce((s, a) => s + Number(a.value || 0), 0);
+      const leads = pickLeads(r.actions);
       rows.push({
         date: r.date_start,
         campaign: r.campaign_name ?? "Meta кампания",
@@ -185,9 +196,7 @@ export async function fetchMetaEntities(
     if (!res.ok || json.error) throw new Error(json.error?.message ?? "Ошибка запроса данных Meta");
     for (const r of json.data ?? []) {
       const extId = String(r[idField] ?? "");
-      const leads = (r.actions ?? [])
-        .filter((a) => LEAD_ACTION_TYPES.has(a.action_type))
-        .reduce((s, a) => s + Number(a.value || 0), 0);
+      const leads = pickLeads(r.actions);
       out.push({
         externalId: extId,
         name: String(r[nameField] ?? "—"),
