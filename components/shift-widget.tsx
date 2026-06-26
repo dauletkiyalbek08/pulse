@@ -77,19 +77,19 @@ export function ShiftWidget({
             className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-line px-5 py-2.5 text-sm font-semibold text-ink transition hover:bg-canvas disabled:opacity-60"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
-            Завершить смену
+            Ушёл
           </button>
         </>
       ) : (
         <>
           <div className="flex items-center gap-2 text-sm font-semibold text-ink">
             <MapPin className="h-5 w-5 text-muted" />
-            Отметка прихода
+            Отметка времени
           </div>
           <p className="mt-1 text-sm text-muted">
             {officeSet
-              ? "Нажмите «Начать смену» — проверим, что вы в офисе."
-              : "Офис ещё не настроен — смену можно начать без проверки места."}
+              ? "«Пришёл» доступен только в офисе — проверяется по геолокации."
+              : "Офис ещё не настроен — отметиться можно без проверки места."}
           </p>
           <button
             type="button"
@@ -98,7 +98,7 @@ export function ShiftWidget({
             className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-strong disabled:opacity-60"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
-            {busyGeo ? "Определяем геопозицию…" : "Начать смену"}
+            {busyGeo ? "Определяем геопозицию…" : "Пришёл"}
           </button>
         </>
       )}
