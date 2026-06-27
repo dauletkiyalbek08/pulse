@@ -28,7 +28,7 @@ export default async function LeadsPage({
   // Хантер видит только свои лиды
   let leadsQuery = supabase
     .from("leads")
-    .select("id, full_name, phone, source, status, assigned_to, value, created_at")
+    .select("id, full_name, phone, source, status, assigned_to, value, created_at, external_id")
     .eq("project_id", projectId)
     .gte("created_at", range.from)
     .lt("created_at", rangeEndExclusive(range))
@@ -63,7 +63,11 @@ export default async function LeadsPage({
     value: l.value,
     created_at: l.created_at,
     assigneeName: l.assigned_to ? nameById.get(l.assigned_to) ?? null : null,
+    fromMeta: !!l.external_id,
   }));
+
+  // Кто может отмечать покупку (и запускать CAPI): продажи ведут менеджеры/руководство.
+  const canSell = ["owner", "director", "head_sales", "manager"].includes(role ?? "");
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -94,7 +98,7 @@ export default async function LeadsPage({
         <NewLeadForm projectId={projectId} />
       </div>
 
-      <LeadsTable rows={rows} niche={niche.key} />
+      <LeadsTable rows={rows} niche={niche.key} projectId={projectId} canSell={canSell} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Search, RotateCcw } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { Pill } from "@/components/pill";
+import { PurchaseButton } from "@/components/purchase-button";
 import { getLeadStatusMeta, leadStatusOrder, sourceLabel } from "@/lib/leads";
 import type { Niche } from "@/lib/niches";
 import { formatCurrency, formatDateTime } from "@/lib/format";
@@ -17,12 +18,23 @@ export interface LeadRow {
   value: number | null;
   created_at: string;
   assigneeName: string | null;
+  fromMeta: boolean;
 }
 
 const selectClass =
   "rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink focus:border-brand focus:outline-none";
 
-export function LeadsTable({ rows, niche }: { rows: LeadRow[]; niche: Niche }) {
+export function LeadsTable({
+  rows,
+  niche,
+  projectId,
+  canSell = false,
+}: {
+  rows: LeadRow[];
+  niche: Niche;
+  projectId: string;
+  canSell?: boolean;
+}) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [source, setSource] = useState("");
@@ -104,6 +116,7 @@ export function LeadsTable({ rows, niche }: { rows: LeadRow[]; niche: Niche }) {
                 <th className="px-5 py-3 font-medium">Статус</th>
                 <th className="px-5 py-3 text-right font-medium">Сумма</th>
                 <th className="px-5 py-3 font-medium">Пришёл</th>
+                {canSell && <th className="px-5 py-3" />}
               </tr>
             </thead>
             <tbody>
@@ -143,6 +156,20 @@ export function LeadsTable({ rows, niche }: { rows: LeadRow[]; niche: Niche }) {
                     <td className="px-5 py-3 whitespace-nowrap text-muted">
                       {formatDateTime(lead.created_at)}
                     </td>
+                    {canSell && (
+                      <td className="px-5 py-3 text-right">
+                        {lead.status === "sale" ? (
+                          <span className="text-xs text-faint">куплено</span>
+                        ) : (
+                          <PurchaseButton
+                            projectId={projectId}
+                            leadId={lead.id}
+                            leadName={lead.full_name}
+                            fromMeta={lead.fromMeta}
+                          />
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}

@@ -600,6 +600,84 @@ export type Database = {
         }
         Relationships: []
       }
+      capi_config: {
+        Row: {
+          connected_by: string | null
+          created_at: string
+          dataset_id: string
+          last_error: string | null
+          last_event_at: string | null
+          project_id: string
+          status: string
+          test_event_code: string | null
+          token_enc: string
+        }
+        Insert: {
+          connected_by?: string | null
+          created_at?: string
+          dataset_id: string
+          last_error?: string | null
+          last_event_at?: string | null
+          project_id: string
+          status?: string
+          test_event_code?: string | null
+          token_enc: string
+        }
+        Update: {
+          connected_by?: string | null
+          created_at?: string
+          dataset_id?: string
+          last_error?: string | null
+          last_event_at?: string | null
+          project_id?: string
+          status?: string
+          test_event_code?: string | null
+          token_enc?: string
+        }
+        Relationships: []
+      }
+      capi_events: {
+        Row: {
+          created_at: string
+          currency: string
+          event_id: string
+          event_name: string
+          id: string
+          lead_id: string | null
+          project_id: string
+          response: string | null
+          sale_id: string | null
+          status: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          event_id: string
+          event_name?: string
+          id?: string
+          lead_id?: string | null
+          project_id: string
+          response?: string | null
+          sale_id?: string | null
+          status?: string
+          value?: number
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          event_id?: string
+          event_name?: string
+          id?: string
+          lead_id?: string | null
+          project_id?: string
+          response?: string | null
+          sale_id?: string | null
+          status?: string
+          value?: number
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           created_at: string
