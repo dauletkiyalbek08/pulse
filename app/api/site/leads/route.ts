@@ -1,0 +1,90 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { pickNextHunter } from "@/lib/distribution";
+import { assignLead } from "@/lib/lead-dispatch";
+
+/**
+ * Приём заявок с сайта (вебхук Tilda и др.).
+ * URL: /api/site/leads?t=<project.site_token>
+ * Заявка → lead (source='site') с привязкой к рекламе через fbc/fbp →
+ * раздача хантеру на смене + Telegram. При покупке по такому лиду CAPI
+ * отправит Purchase по fbc/fbp (см. lib/purchase.ts).
+ */
+
+function pick(m: Record<string, string>, keys: string[]): string {
+  for (const k of keys) {
+    const v = m[k];
+    if (v && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+async function parseBody(req: NextRequest): Promise<Record<string, string>> {
+  const ct = req.headers.get("content-type") || "";
+  const out: Record<string, string> = {};
+  try {
+    if (ct.includes("application/json")) {
+      const j = (await req.json()) as Record<string, unknown>;
+      for (const [k, v] of Object.entries(j)) out[k.toLowerCase()] = v == null ? "" : String(v);
+    } else {
+      const fd = await req.formData();
+      for (const [k, v] of fd.entries()) out[k.toLowerCase()] = typeof v === "string" ? v : "";
+    }
+  } catch {
+    // ignore — вернём пустую карту, обработается как «нет данных»
+  }
+  return out;
+}
+
+export async function POST(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get("t");
+  if (!token) return NextResponse.json({ ok: true }); // нет токена — игнор
+
+  const admin = createAdminClient();
+  const { data: project } = await admin
+    .from("projects")
+    .select("id")
+    .eq("site_token", token)
+    .maybeSingle();
+  if (!project) return NextResponse.json({ ok: true }); // неизвестный токен — тихо игнор
+
+  const m = await parseBody(req);
+
+  const name = pick(m, ["name", "имя", "fio", "фио"]);
+  const phone = pick(m, ["phone", "телефон", "тел", "phone_number", "tel"]);
+  const email = pick(m, ["email", "e-mail", "почта", "mail"]);
+  let fbc = pick(m, ["fbc", "_fbc"]);
+  const fbp = pick(m, ["fbp", "_fbp"]);
+  const fbclid = pick(m, ["fbclid"]);
+
+  // Тестовый запрос Tilda / пустая отправка — без имени и телефона ничего не создаём.
+  if (!name && !phone) return NextResponse.json({ ok: true });
+
+  // Если есть только fbclid — соберём fbc в формате Meta (fb.1.<ts>.<fbclid>).
+  if (!fbc && fbclid) fbc = `fb.1.${Math.floor(Date.now() / 1000)}.${fbclid}`;
+
+  const { data: inserted } = await admin
+    .from("leads")
+    .insert({
+      project_id: project.id,
+      full_name: name || "Заявка с сайта",
+      phone: phone || null,
+      source: "site",
+      status: "new",
+      fbc: fbc || null,
+      fbp: fbp || null,
+    })
+    .select("id")
+    .maybeSingle();
+  if (!inserted) return NextResponse.json({ ok: true });
+
+  // Раздача хантеру на смене (round-robin) + уведомление в Telegram
+  try {
+    const hunter = await pickNextHunter(admin, project.id);
+    if (hunter) await assignLead(admin, project.id, inserted.id, hunter);
+  } catch {
+    // раздача не критична для приёма заявки
+  }
+
+  return NextResponse.json({ ok: true });
+}

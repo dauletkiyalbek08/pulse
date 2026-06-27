@@ -38,7 +38,7 @@ export async function recordPurchase(
 
   const { data: lead } = await admin
     .from("leads")
-    .select("id, external_id")
+    .select("id, external_id, fbc, fbp, phone")
     .eq("id", leadId)
     .eq("project_id", projectId)
     .maybeSingle();
@@ -71,10 +71,13 @@ export async function recordPurchase(
   let capi: CapiOutcome = "not_configured";
   let capiMessage: string | undefined;
 
-  if (cfg && !lead.external_id) {
+  // Привязка: Lead Ads (lead_id) или сайт (fbc/fbp). Иначе слать нечего.
+  const hasAttribution = !!(lead.external_id || lead.fbc || lead.fbp);
+
+  if (cfg && !hasAttribution) {
     capi = "no_lead_id";
-    capiMessage = "Лид не с рекламы Meta — событие в CAPI не отправлено.";
-  } else if (cfg && lead.external_id) {
+    capiMessage = "У лида нет привязки к рекламе (нет lead_id и fbc/fbp) — событие в CAPI не отправлено.";
+  } else if (cfg && hasAttribution) {
     const eventId = sale?.id ?? `sale-${leadId}-${Date.now()}`;
     let token: string | null = null;
     try {
@@ -86,12 +89,10 @@ export async function recordPurchase(
       capi = "error";
       capiMessage = "Не удалось расшифровать токен CAPI.";
     } else {
-      const res = await sendPurchase(
-        cfg.dataset_id,
-        token,
-        { leadId: lead.external_id, value: amount, currency: "KZT", eventId },
-        cfg.test_event_code,
-      );
+      const input = lead.external_id
+        ? { leadId: lead.external_id, value: amount, currency: "KZT", eventId }
+        : { fbc: lead.fbc, fbp: lead.fbp, phone: lead.phone, value: amount, currency: "KZT", eventId };
+      const res = await sendPurchase(cfg.dataset_id, token, input, cfg.test_event_code);
       capi = res.ok ? "sent" : "error";
       capiMessage = res.ok
         ? `Purchase отправлен в Meta (events_received=${res.received}).`

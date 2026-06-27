@@ -313,6 +313,8 @@ export type Database = {
           campaign_id: string | null
           created_at: string
           external_id: string | null
+          fbc: string | null
+          fbp: string | null
           form_id: string | null
           full_name: string
           id: string
@@ -331,6 +333,8 @@ export type Database = {
           campaign_id?: string | null
           created_at?: string
           external_id?: string | null
+          fbc?: string | null
+          fbp?: string | null
           form_id?: string | null
           full_name: string
           id?: string
@@ -349,6 +353,8 @@ export type Database = {
           campaign_id?: string | null
           created_at?: string
           external_id?: string | null
+          fbc?: string | null
+          fbp?: string | null
           form_id?: string | null
           full_name?: string
           id?: string
@@ -526,6 +532,7 @@ export type Database = {
           office_radius_m: number
           owner_id: string
           plan: string
+          site_token: string
           status: string
           usd_rate: number
         }
@@ -544,6 +551,7 @@ export type Database = {
           office_radius_m?: number
           owner_id: string
           plan?: string
+          site_token?: string
           status?: string
           usd_rate?: number
         }
@@ -562,6 +570,7 @@ export type Database = {
           office_radius_m?: number
           owner_id?: string
           plan?: string
+          site_token?: string
           status?: string
           usd_rate?: number
         }
