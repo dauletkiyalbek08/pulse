@@ -577,6 +577,7 @@ export type Database = {
           manager_id: string | null
           product: string | null
           project_id: string
+          receipt_file_id: string | null
         }
         Insert: {
           amount?: number
@@ -587,6 +588,7 @@ export type Database = {
           manager_id?: string | null
           product?: string | null
           project_id: string
+          receipt_file_id?: string | null
         }
         Update: {
           amount?: number
@@ -597,6 +599,7 @@ export type Database = {
           manager_id?: string | null
           product?: string | null
           project_id?: string
+          receipt_file_id?: string | null
         }
         Relationships: []
       }
@@ -705,6 +708,39 @@ export type Database = {
           phone?: string | null
           project_id?: string
           total_spent?: number
+        }
+        Relationships: []
+      }
+      tg_sale_drafts: {
+        Row: {
+          amount: number | null
+          chat_id: number
+          lead_id: string | null
+          lead_name: string | null
+          project_id: string
+          step: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          chat_id: number
+          lead_id?: string | null
+          lead_name?: string | null
+          project_id: string
+          step: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          chat_id?: number
+          lead_id?: string | null
+          lead_name?: string | null
+          project_id?: string
+          step?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

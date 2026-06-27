@@ -76,6 +76,22 @@ export function shiftKeyboard() {
   };
 }
 
+/** Клавиатура менеджера: оформить продажу. */
+export function saleKeyboard() {
+  return {
+    keyboard: [[{ text: "💰 Оформить продажу" }]],
+    resize_keyboard: true,
+  };
+}
+
+/** Клавиатура внутри диалога продажи: отмена. */
+export function cancelKeyboard() {
+  return {
+    keyboard: [[{ text: "❌ Отмена" }]],
+    resize_keyboard: true,
+  };
+}
+
 export function leadCard(lead: {
   full_name: string;
   phone: string | null;

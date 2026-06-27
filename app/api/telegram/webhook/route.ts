@@ -2,16 +2,89 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineMeters } from "@/lib/geo";
 import { reassignLead } from "@/lib/lead-dispatch";
+import { recordPurchase, type CapiOutcome } from "@/lib/purchase";
 import {
   sendMessage,
   answerCallback,
   editMessageText,
   shiftKeyboard,
+  saleKeyboard,
+  cancelKeyboard,
   acceptedButtons,
   leadCardAccepted,
 } from "@/lib/telegram";
 
 type Admin = ReturnType<typeof createAdminClient>;
+
+const SELL_ROLES = ["owner", "director", "head_sales", "manager"];
+
+/** Эффективная роль пользователя в проекте (для бота, через admin-клиент). */
+async function effectiveRole(
+  admin: Admin,
+  projectId: string,
+  userId: string,
+): Promise<string | null> {
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("global_role")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profile?.global_role === "owner") return "owner";
+  const { data: project } = await admin
+    .from("projects")
+    .select("owner_id")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (project?.owner_id === userId) return "director";
+  const { data: member } = await admin
+    .from("project_members")
+    .select("role")
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  return member?.role ?? null;
+}
+
+/** Клавиатура по роли: хантеру — смена, продавцу — продажа. */
+function keyboardForRole(role: string | null) {
+  if (role === "hunter") return shiftKeyboard();
+  if (role && SELL_ROLES.includes(role)) return saleKeyboard();
+  return shiftKeyboard();
+}
+
+const normalizePhone = (s: string) => s.replace(/\D/g, "");
+
+/** Найти лид проекта по телефону (сравниваем последние 10 цифр). */
+async function findLeadByPhone(admin: Admin, projectId: string, phoneInput: string) {
+  const last10 = normalizePhone(phoneInput).slice(-10);
+  if (last10.length < 10) return null;
+  const { data: leads } = await admin
+    .from("leads")
+    .select("id, full_name, phone, external_id")
+    .eq("project_id", projectId)
+    .not("phone", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  for (const l of leads ?? []) {
+    if (normalizePhone(l.phone ?? "").slice(-10) === last10) return l;
+  }
+  return null;
+}
+
+/** Текст подтверждения продажи (с учётом результата CAPI). */
+function saleConfirmText(name: string, amount: number, capi: CapiOutcome): string {
+  const base = `✅ Продажа записана: <b>${name}</b> — ${amount.toLocaleString("ru-RU")} ₸`;
+  const tail =
+    capi === "sent"
+      ? "\n📤 Событие отправлено в Meta (CAPI) — пойдёт в похожие аудитории."
+      : capi === "no_lead_id"
+        ? "\nℹ️ Лид не с рекламы Meta — в CAPI не отправляли."
+        : capi === "error"
+          ? "\n⚠️ Покупка записана, но событие в Meta не ушло (ошибка CAPI)."
+          : "";
+  return base + tail;
+}
 
 async function closeShift(admin: Admin, projectId: string, userId: string) {
   await admin
@@ -38,6 +111,8 @@ interface TgMessage {
   text?: string;
   from?: { username?: string };
   location?: { latitude: number; longitude: number };
+  photo?: { file_id: string; file_unique_id: string }[];
+  contact?: { phone_number?: string };
 }
 interface TgCallback {
   id: string;
@@ -105,6 +180,152 @@ async function startShift(
   return { ok: true as const, distance };
 }
 
+/**
+ * Поток оформления продажи менеджером (мини-состояние в tg_sale_drafts).
+ * Возвращает true, если сообщение относится к продаже (тогда хантерские
+ * обработчики пропускаются).
+ */
+async function handleManagerSale(
+  admin: Admin,
+  msg: TgMessage,
+  link: { project_id: string; user_id: string },
+): Promise<boolean> {
+  const chatId = msg.chat.id;
+  const text = msg.text?.trim();
+
+  // Старт продажи
+  if (text === "💰 Оформить продажу") {
+    const role = await effectiveRole(admin, link.project_id, link.user_id);
+    if (!role || !SELL_ROLES.includes(role)) {
+      await sendMessage(chatId, "Оформлять продажи может только менеджер/руководитель.");
+      return true;
+    }
+    await admin.from("tg_sale_drafts").upsert(
+      {
+        chat_id: chatId,
+        project_id: link.project_id,
+        user_id: link.user_id,
+        step: "phone",
+        lead_id: null,
+        lead_name: null,
+        amount: null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "chat_id" },
+    );
+    await sendMessage(
+      chatId,
+      "📱 Отправьте <b>номер телефона клиента</b>, который купил курс.",
+      { replyMarkup: cancelKeyboard() },
+    );
+    return true;
+  }
+
+  // Отмена
+  if (text === "❌ Отмена") {
+    const { data: existing } = await admin
+      .from("tg_sale_drafts")
+      .select("chat_id")
+      .eq("chat_id", chatId)
+      .maybeSingle();
+    if (!existing) return false;
+    await admin.from("tg_sale_drafts").delete().eq("chat_id", chatId);
+    const role = await effectiveRole(admin, link.project_id, link.user_id);
+    await sendMessage(chatId, "Оформление продажи отменено.", { replyMarkup: keyboardForRole(role) });
+    return true;
+  }
+
+  // Активный черновик?
+  const { data: draft } = await admin
+    .from("tg_sale_drafts")
+    .select("step, lead_id, lead_name, amount")
+    .eq("chat_id", chatId)
+    .maybeSingle();
+  if (!draft) return false;
+
+  // Шаг 1 — телефон (текстом или пересланным контактом)
+  if (draft.step === "phone") {
+    const phoneInput = text || msg.contact?.phone_number?.trim();
+    if (!phoneInput) {
+      await sendMessage(chatId, "Отправьте номер телефона текстом (например +7 705 123 45 67) или перешлите контакт.", {
+        replyMarkup: cancelKeyboard(),
+      });
+      return true;
+    }
+    const lead = await findLeadByPhone(admin, link.project_id, phoneInput);
+    if (!lead) {
+      await sendMessage(
+        chatId,
+        `❌ Лид с номером <b>${phoneInput}</b> не найден в проекте. Проверьте номер и отправьте ещё раз, или «❌ Отмена».`,
+        { replyMarkup: cancelKeyboard() },
+      );
+      return true;
+    }
+    await admin
+      .from("tg_sale_drafts")
+      .update({ step: "amount", lead_id: lead.id, lead_name: lead.full_name, updated_at: new Date().toISOString() })
+      .eq("chat_id", chatId);
+    await sendMessage(
+      chatId,
+      `Клиент: <b>${lead.full_name}</b>.\n💰 Введите <b>сумму покупки в ₸</b> (например 120000).`,
+      { replyMarkup: cancelKeyboard() },
+    );
+    return true;
+  }
+
+  // Шаг 2 — сумма
+  if (draft.step === "amount") {
+    const amount = Number((text ?? "").replace(/[^\d.]/g, ""));
+    if (!(amount > 0)) {
+      await sendMessage(chatId, "Введите сумму числом, например 120000.", { replyMarkup: cancelKeyboard() });
+      return true;
+    }
+    await admin
+      .from("tg_sale_drafts")
+      .update({ step: "receipt", amount, updated_at: new Date().toISOString() })
+      .eq("chat_id", chatId);
+    await sendMessage(chatId, "🧾 Прикрепите <b>фото чека</b> — или отправьте «пропустить».", {
+      replyMarkup: cancelKeyboard(),
+    });
+    return true;
+  }
+
+  // Шаг 3 — чек (фото) или «пропустить» → запись продажи + CAPI
+  if (draft.step === "receipt") {
+    const skip = !!text && /^пропустить$/i.test(text);
+    const receiptFileId = msg.photo?.length ? msg.photo[msg.photo.length - 1].file_id : null;
+    if (!receiptFileId && !skip) {
+      await sendMessage(chatId, "Пришлите фото чека или напишите «пропустить».", { replyMarkup: cancelKeyboard() });
+      return true;
+    }
+    if (!draft.lead_id || !(Number(draft.amount) > 0)) {
+      await admin.from("tg_sale_drafts").delete().eq("chat_id", chatId);
+      await sendMessage(chatId, "Черновик повреждён. Начните заново: «💰 Оформить продажу».", {
+        replyMarkup: saleKeyboard(),
+      });
+      return true;
+    }
+    const res = await recordPurchase(admin, {
+      projectId: link.project_id,
+      leadId: draft.lead_id,
+      managerId: link.user_id,
+      amount: Number(draft.amount),
+      receiptFileId,
+    });
+    await admin.from("tg_sale_drafts").delete().eq("chat_id", chatId);
+    if (!res.ok) {
+      await sendMessage(chatId, `❌ Не удалось записать продажу: ${res.error}`, { replyMarkup: saleKeyboard() });
+      return true;
+    }
+    await sendMessage(chatId, saleConfirmText(draft.lead_name ?? "клиент", Number(draft.amount), res.capi), {
+      replyMarkup: saleKeyboard(),
+    });
+    return true;
+  }
+
+  return false;
+}
+
 async function handleMessage(admin: Admin, msg: TgMessage) {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -147,10 +368,15 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
       .select("full_name")
       .eq("id", codeRow.user_id)
       .maybeSingle();
+    const role = await effectiveRole(admin, codeRow.project_id, codeRow.user_id);
+    const hint =
+      role && SELL_ROLES.includes(role) && role !== "hunter"
+        ? "Нажмите «💰 Оформить продажу», когда клиент купит курс."
+        : "Нажмите «Я на смене», чтобы начать получать лиды.";
     await sendMessage(
       chatId,
-      `✅ Аккаунт привязан, <b>${profile?.full_name ?? ""}</b>!\nНажмите «Я на смене», чтобы начать получать лиды.`,
-      { replyMarkup: shiftKeyboard() },
+      `✅ Аккаунт привязан, <b>${profile?.full_name ?? ""}</b>!\n${hint}`,
+      { replyMarkup: keyboardForRole(role) },
     );
     return;
   }
@@ -160,6 +386,9 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     await sendMessage(chatId, "Аккаунт не привязан. Откройте ссылку привязки из Pulse.");
     return;
   }
+
+  // Поток оформления продажи (менеджер) — обрабатываем до хантерских кнопок
+  if (await handleManagerSale(admin, msg, link)) return;
 
   // Геолокация — начать смену с подтверждением офиса
   if (msg.location) {
@@ -220,11 +449,18 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     return;
   }
 
-  await sendMessage(
-    chatId,
-    "Кнопки: «🟢 Начать смену», «📍 Я в офисе (геолокация)» для подтверждения офиса и «🔚 Ушёл».",
-    { replyMarkup: shiftKeyboard() },
-  );
+  const role = await effectiveRole(admin, link.project_id, link.user_id);
+  if (role && SELL_ROLES.includes(role) && role !== "hunter") {
+    await sendMessage(chatId, "Нажмите «💰 Оформить продажу», чтобы записать покупку клиента.", {
+      replyMarkup: saleKeyboard(),
+    });
+  } else {
+    await sendMessage(
+      chatId,
+      "Кнопки: «🟢 Начать смену», «📍 Я в офисе (геолокация)» для подтверждения офиса и «🔚 Ушёл».",
+      { replyMarkup: shiftKeyboard() },
+    );
+  }
 }
 
 async function handleCallback(admin: Admin, cb: TgCallback) {
