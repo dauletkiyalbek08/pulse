@@ -612,6 +612,140 @@ export type Database = {
         }
         Relationships: []
       }
+      call_ai_config: {
+        Row: {
+          api_key_enc: string
+          connected_by: string | null
+          created_at: string
+          hunter_rules: string
+          last_error: string | null
+          model: string
+          project_id: string
+          provider: string
+          sales_rules: string
+          status: string
+        }
+        Insert: {
+          api_key_enc: string
+          connected_by?: string | null
+          created_at?: string
+          hunter_rules?: string
+          last_error?: string | null
+          model?: string
+          project_id: string
+          provider?: string
+          sales_rules?: string
+          status?: string
+        }
+        Update: {
+          api_key_enc?: string
+          connected_by?: string | null
+          created_at?: string
+          hunter_rules?: string
+          last_error?: string | null
+          model?: string
+          project_id?: string
+          provider?: string
+          sales_rules?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_ai_config_connected_by_fkey"
+            columns: ["connected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_ai_config_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_analyses: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          criteria: Json
+          employee_id: string | null
+          id: string
+          issues: Json
+          lead_id: string | null
+          overall_score: number
+          project_id: string
+          recommendations: Json
+          role_type: string
+          strengths: Json
+          summary: string | null
+          transcript: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          criteria?: Json
+          employee_id?: string | null
+          id?: string
+          issues?: Json
+          lead_id?: string | null
+          overall_score?: number
+          project_id: string
+          recommendations?: Json
+          role_type?: string
+          strengths?: Json
+          summary?: string | null
+          transcript: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          criteria?: Json
+          employee_id?: string | null
+          id?: string
+          issues?: Json
+          lead_id?: string | null
+          overall_score?: number
+          project_id?: string
+          recommendations?: Json
+          role_type?: string
+          strengths?: Json
+          summary?: string | null
+          transcript?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_analyses_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_analyses_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_analyses_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_analyses_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       capi_config: {
         Row: {
           connected_by: string | null
