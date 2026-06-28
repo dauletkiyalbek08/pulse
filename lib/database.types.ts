@@ -615,6 +615,8 @@ export type Database = {
       call_ai_config: {
         Row: {
           api_key_enc: string
+          asr_key_enc: string | null
+          asr_model: string
           connected_by: string | null
           created_at: string
           hunter_rules: string
@@ -627,6 +629,8 @@ export type Database = {
         }
         Insert: {
           api_key_enc: string
+          asr_key_enc?: string | null
+          asr_model?: string
           connected_by?: string | null
           created_at?: string
           hunter_rules?: string
@@ -639,6 +643,8 @@ export type Database = {
         }
         Update: {
           api_key_enc?: string
+          asr_key_enc?: string | null
+          asr_model?: string
           connected_by?: string | null
           created_at?: string
           hunter_rules?: string

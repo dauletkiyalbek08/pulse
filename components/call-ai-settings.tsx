@@ -2,8 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Settings2, CheckCircle2 } from "lucide-react";
-import { connectCallAi, disconnectCallAi, updateCallRules } from "@/app/p/[projectId]/calls/actions";
+import { Loader2, Settings2, CheckCircle2, Mic } from "lucide-react";
+import {
+  connectCallAi,
+  disconnectCallAi,
+  updateCallRules,
+  connectAsr,
+  disconnectAsr,
+} from "@/app/p/[projectId]/calls/actions";
 
 export interface CallAiStatus {
   connected: boolean;
@@ -12,6 +18,8 @@ export interface CallAiStatus {
   lastError: string | null;
   salesRules: string;
   hunterRules: string;
+  asrConnected: boolean;
+  asrModel: string;
 }
 
 /** Подключение DeepSeek + правила оценки (для директора/РОП). */
@@ -37,6 +45,31 @@ export function CallAiSettings({
   const [salesRules, setSalesRules] = useState(status?.salesRules ?? "");
   const [hunterRules, setHunterRules] = useState(status?.hunterRules ?? "");
   const [saved, setSaved] = useState(false);
+
+  // Распознавание речи (OpenAI)
+  const [asrKey, setAsrKey] = useState("");
+  const [asrModel, setAsrModel] = useState(status?.asrModel || "whisper-1");
+  const [asrError, setAsrError] = useState<string | null>(null);
+
+  function connectAsrFn() {
+    setAsrError(null);
+    start(async () => {
+      const r = await connectAsr(projectId, asrKey, asrModel);
+      if (!r.ok) {
+        setAsrError(r.error ?? "Ошибка подключения");
+        return;
+      }
+      setAsrKey("");
+      router.refresh();
+    });
+  }
+
+  function disconnectAsrFn() {
+    start(async () => {
+      await disconnectAsr(projectId);
+      router.refresh();
+    });
+  }
 
   function connect() {
     setError(null);
@@ -133,6 +166,61 @@ export function CallAiSettings({
           </button>
         )}
       </div>
+
+      {canManage && (
+        <div className="mt-4 border-t border-line pt-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Mic className="h-4 w-4 text-muted" />
+            <span className="font-medium text-ink">Распознавание речи</span>
+            {status.asrConnected ? (
+              <span className="text-muted">· подключено ({status.asrModel})</span>
+            ) : (
+              <span className="text-faint">· не подключено (нужно для загрузки аудио)</span>
+            )}
+          </div>
+          {status.asrConnected ? (
+            <button
+              type="button"
+              onClick={disconnectAsrFn}
+              disabled={pending}
+              className="mt-2 rounded-xl border border-line px-3 py-1.5 text-xs text-muted transition hover:bg-red-50 hover:text-red-600"
+            >
+              Отключить распознавание
+            </button>
+          ) : (
+            <div className="mt-2">
+              <p className="mb-2 text-xs text-muted">
+                API-ключ OpenAI (Whisper) для загрузки аудиозаписей. Хранится зашифрованно на сервере.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-[1fr_180px]">
+                <input
+                  type="password"
+                  value={asrKey}
+                  onChange={(e) => setAsrKey(e.target.value)}
+                  placeholder="sk-… (API-ключ OpenAI)"
+                  className="w-full rounded-xl border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-brand focus:outline-none"
+                />
+                <input
+                  value={asrModel}
+                  onChange={(e) => setAsrModel(e.target.value)}
+                  placeholder="whisper-1"
+                  className="w-full rounded-xl border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-brand focus:outline-none"
+                />
+              </div>
+              {asrError && <p className="mt-2 text-sm text-red-600">{asrError}</p>}
+              <button
+                type="button"
+                onClick={connectAsrFn}
+                disabled={pending || !asrKey.trim()}
+                className="mt-2 inline-flex items-center gap-2 rounded-xl bg-brand px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-strong disabled:opacity-50"
+              >
+                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Подключить распознавание
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {canManage && open && (
         <div className="mt-5 space-y-4 border-t border-line pt-5">

@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import type { Json } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
@@ -13,6 +14,7 @@ import {
   type CallRole,
   type CallResult,
 } from "@/lib/call-analysis";
+import { verifyAsrKey } from "@/lib/asr";
 
 const MANAGE_ROLES = ["owner", "director", "head_sales"];
 const ANALYZE_ROLES = ["owner", "director", "head_sales", "manager"];
@@ -28,13 +30,15 @@ export interface CallAiStatus {
   lastError: string | null;
   salesRules: string;
   hunterRules: string;
+  asrConnected: boolean;
+  asrModel: string;
 }
 
 export async function getCallAiStatus(projectId: string): Promise<CallAiStatus | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("call_ai_config")
-    .select("model, status, last_error, sales_rules, hunter_rules")
+    .select("model, status, last_error, sales_rules, hunter_rules, asr_key_enc, asr_model")
     .eq("project_id", projectId)
     .maybeSingle();
   if (!data) return null;
@@ -45,7 +49,82 @@ export async function getCallAiStatus(projectId: string): Promise<CallAiStatus |
     lastError: data.last_error,
     salesRules: data.sales_rules || DEFAULT_RULES.sales,
     hunterRules: data.hunter_rules || DEFAULT_RULES.hunter,
+    asrConnected: !!data.asr_key_enc,
+    asrModel: data.asr_model,
   };
+}
+
+/** Подключить распознавание речи (OpenAI Whisper) — ключ шифрованно. */
+export async function connectAsr(
+  projectId: string,
+  apiKey: string,
+  model: string,
+): Promise<ConnectResult> {
+  if (!MANAGE_ROLES.includes((await roleOf(projectId)) ?? "")) return { ok: false, error: "Недостаточно прав" };
+  if (!apiKey.trim()) return { ok: false, error: "Укажите API-ключ OpenAI" };
+
+  const admin = createAdminClient();
+  const { data: cfg } = await admin
+    .from("call_ai_config")
+    .select("project_id")
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (!cfg) return { ok: false, error: "Сначала подключите DeepSeek" };
+
+  try {
+    await verifyAsrKey(apiKey.trim());
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Ключ не прошёл проверку" };
+  }
+
+  let asr_key_enc: string;
+  try {
+    asr_key_enc = encryptSecret(apiKey.trim());
+  } catch {
+    return { ok: false, error: "Сервер не настроен (нет ключа шифрования)" };
+  }
+
+  const { error } = await admin
+    .from("call_ai_config")
+    .update({ asr_key_enc, asr_model: model.trim() || "whisper-1" })
+    .eq("project_id", projectId);
+  if (error) return { ok: false, error: "Не удалось сохранить ключ распознавания" };
+
+  revalidatePath(`/p/${projectId}/calls`);
+  return { ok: true };
+}
+
+export async function disconnectAsr(projectId: string): Promise<{ ok: boolean }> {
+  if (!MANAGE_ROLES.includes((await roleOf(projectId)) ?? "")) return { ok: false };
+  const admin = createAdminClient();
+  await admin.from("call_ai_config").update({ asr_key_enc: null }).eq("project_id", projectId);
+  revalidatePath(`/p/${projectId}/calls`);
+  return { ok: true };
+}
+
+export interface UploadUrlResult {
+  ok: boolean;
+  error?: string;
+  path?: string;
+  token?: string;
+}
+
+/** Подписанная ссылка для загрузки аудио в хранилище (минуя лимит тела запроса). */
+export async function createAudioUpload(projectId: string, ext: string): Promise<UploadUrlResult> {
+  if (!ANALYZE_ROLES.includes((await roleOf(projectId)) ?? "")) return { ok: false, error: "Недостаточно прав" };
+  const admin = createAdminClient();
+  const { data: cfg } = await admin
+    .from("call_ai_config")
+    .select("asr_key_enc")
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (!cfg?.asr_key_enc) return { ok: false, error: "Распознавание речи не подключено" };
+
+  const safeExt = (ext || "m4a").replace(/[^a-z0-9]/gi, "").slice(0, 8) || "m4a";
+  const path = `${projectId}/${randomUUID()}.${safeExt}`;
+  const { data, error } = await admin.storage.from("call-audio").createSignedUploadUrl(path);
+  if (error || !data) return { ok: false, error: "Не удалось подготовить загрузку" };
+  return { ok: true, path: data.path, token: data.token };
 }
 
 export interface ConnectResult {
