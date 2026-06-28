@@ -5,8 +5,39 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptSecret } from "@/lib/crypto";
-import { fetchMetaEntities, guessObjective, type AdLevel } from "@/lib/meta";
+import { fetchMetaEntities, fetchAdCreatives, guessObjective, type AdLevel } from "@/lib/meta";
 import type { CampaignRow } from "@/components/campaigns-table";
+
+export interface AdThumb {
+  thumb: string | null;
+  full: string | null;
+}
+
+/**
+ * Миниатюры креативов по ad_id (для «Аналитики креативов»).
+ * Отдельно от getLiveAds, чтобы не замедлять «Рекламу»/«Финансы».
+ */
+export async function getAdThumbnails(projectId: string): Promise<Map<string, AdThumb>> {
+  const admin = createAdminClient();
+  const { data: integs } = await admin
+    .from("meta_integration")
+    .select("ad_account_id, token_enc")
+    .eq("project_id", projectId);
+
+  const map = new Map<string, AdThumb>();
+  if (!integs || integs.length === 0) return map;
+
+  for (const ig of integs) {
+    try {
+      const token = decryptSecret(ig.token_enc);
+      const creatives = await fetchAdCreatives(ig.ad_account_id, token);
+      for (const c of creatives) map.set(c.adId, { thumb: c.thumbUrl, full: c.fullUrl });
+    } catch {
+      // превью не критичны для раздела
+    }
+  }
+  return map;
+}
 
 export interface LiveAds {
   /** Есть ли хотя бы один подключённый кабинет. */

@@ -227,6 +227,47 @@ export function fetchMetaCampaigns(
   return fetchMetaEntities(adAccountId, token, "campaign", since, until);
 }
 
+export interface AdCreativeThumb {
+  adId: string;
+  thumbUrl: string | null; // миниатюра (есть и у видео, и у картинок)
+  fullUrl: string | null; // полная картинка (если объявление-картинка)
+}
+
+/**
+ * Миниатюры креативов по объявлениям кабинета — для превью в аналитике.
+ * Превью не критичны: при ошибке возвращаем, что успели собрать.
+ */
+export async function fetchAdCreatives(
+  adAccountId: string,
+  token: string,
+): Promise<AdCreativeThumb[]> {
+  const id = accountNumber(adAccountId);
+  let url =
+    `${GRAPH}/act_${id}/ads` +
+    `?fields=id,creative{thumbnail_url,image_url}` +
+    `&limit=200&access_token=${encodeURIComponent(token)}`;
+
+  const out: AdCreativeThumb[] = [];
+  for (let page = 0; page < 20 && url; page++) {
+    const res = await fetch(url, { next: { revalidate: 300 } });
+    const json = (await res.json()) as {
+      data?: { id: string; creative?: { thumbnail_url?: string; image_url?: string } }[];
+      paging?: { next?: string };
+      error?: { message?: string };
+    };
+    if (!res.ok || json.error) break;
+    for (const a of json.data ?? []) {
+      out.push({
+        adId: a.id,
+        thumbUrl: a.creative?.thumbnail_url ?? null,
+        fullUrl: a.creative?.image_url ?? a.creative?.thumbnail_url ?? null,
+      });
+    }
+    url = json.paging?.next ?? "";
+  }
+  return out;
+}
+
 /* ───────────────────────── Lead Ads (формы) ───────────────────────── */
 
 export interface MetaPage {

@@ -8,6 +8,7 @@ import {
   formatCurrencyShort,
   formatNumber,
   formatPercent,
+  formatUsd,
 } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -19,43 +20,41 @@ import {
   type CreativeRow,
   type CreativeVerdict,
 } from "@/components/creatives-table";
-import { getLiveAds } from "@/lib/ads-live";
+import { getLiveAds, getAdThumbnails } from "@/lib/ads-live";
 
 /**
  * Оценка креатива по расходу/лидам/продажам:
- *  - top  — окупается (ROAS ≥ 1) или есть продажи без расхода;
- *  - weak — расход без лидов, либо дорогие лиды без продаж;
- *  - ok   — всё остальное (лиды идут, продаж пока нет / ROAS < 1).
+ *  - top  — окупается продажами (ROAS ≥ 1) либо даёт дешёвые лиды;
+ *  - weak — расход без лидов либо дорогие лиды;
+ *  - ok   — всё остальное.
+ * Лиды берём из данных Meta (есть у каждого объявления); продажи/выручку —
+ * из CRM по ad_id лида (замкнутый цикл; активируется на заявках с форм Meta).
  */
 function classifyCreative(
-  spendKzt: number,
-  crmLeads: number,
+  spendUsd: number,
+  leads: number,
   buyers: number,
-  revenue: number,
+  roas: number | null,
+  cplUsd: number | null,
   avgCpl: number | null,
 ): { verdict: CreativeVerdict; hint: string } {
-  if (spendKzt === 0) {
+  if (spendUsd <= 0) {
     return buyers > 0
       ? { verdict: "top", hint: "продажи без расхода" }
       : { verdict: "ok", hint: "нет расхода за период" };
   }
-  if (crmLeads === 0) return { verdict: "weak", hint: "расход без лидов" };
-  const roas = revenue / spendKzt;
-  if (roas >= 1) return { verdict: "top", hint: `ROAS ${roas.toFixed(1).replace(".", ",")}x` };
-  if (buyers > 0) return { verdict: "ok", hint: "есть продажи, ROAS < 1" };
-  const cpl = spendKzt / crmLeads;
-  if (avgCpl != null && cpl > avgCpl * 1.5) {
-    return { verdict: "weak", hint: "дорогие лиды, нет продаж" };
+  if (leads === 0) return { verdict: "weak", hint: "расход без лидов" };
+  if (buyers > 0) {
+    if (roas != null && roas >= 1) return { verdict: "top", hint: `ROAS ${roas.toFixed(1).replace(".", ",")}x` };
+    return { verdict: "ok", hint: "есть продажи, ROAS < 1" };
   }
-  return { verdict: "ok", hint: "лиды есть, продаж пока нет" };
+  if (avgCpl != null && cplUsd != null) {
+    if (cplUsd <= avgCpl * 0.7) return { verdict: "top", hint: "дешёвые лиды" };
+    if (cplUsd > avgCpl * 1.5) return { verdict: "weak", hint: "дорогие лиды" };
+  }
+  return { verdict: "ok", hint: "лиды идут" };
 }
 
-/**
- * Аналитика креативов: какое объявление приносит лиды и реальные продажи.
- * Расход берём из Meta на уровне объявлений (живьём за период), продажи —
- * из CRM по ad_id лида (замкнутый цикл реклама → продажа). Расход $ → ₸
- * по курсу проекта (usd_rate), как в «Финансах», чтобы ROAS считался в одной валюте.
- */
 export default async function CreativesPage({
   params,
   searchParams,
@@ -70,9 +69,10 @@ export default async function CreativesPage({
 
   const supabase = await createClient();
 
-  // Объявления Meta за период + курс $→₸ + наши лиды с привязкой к объявлению.
-  const [live, { data: project }, { data: leadRows }] = await Promise.all([
+  // Объявления Meta за период + миниатюры креативов + курс $→₸ + наши лиды с ad_id.
+  const [live, thumbs, { data: project }, { data: leadRows }] = await Promise.all([
     getLiveAds(projectId, "ad", range.from, range.to),
+    getAdThumbnails(projectId),
     supabase.from("projects").select("usd_rate").eq("id", projectId).maybeSingle(),
     supabase
       .from("leads")
@@ -90,7 +90,7 @@ export default async function CreativesPage({
   const adByLead = new Map<string, string>();
   for (const l of leads) if (l.ad_id) adByLead.set(l.id, l.ad_id);
 
-  // Продажи по лидам, пришедшим за период с объявления
+  // Продажи по лидам, пришедшим за период с объявления (замкнутый цикл)
   let salesRows: { lead_id: string | null; amount: number }[] = [];
   const leadIds = leads.map((l) => l.id);
   if (leadIds.length > 0) {
@@ -102,75 +102,82 @@ export default async function CreativesPage({
     salesRows = (data ?? []) as { lead_id: string | null; amount: number }[];
   }
 
-  // Агрегаты по объявлению: лиды, покупатели (уникальные лиды с продажей), выручка
-  type Agg = { crmLeads: number; buyers: Set<string>; revenue: number };
+  // Агрегаты CRM по объявлению: покупатели (уникальные лиды с продажей) и выручка
+  type Agg = { buyers: Set<string>; revenue: number };
   const byAd = new Map<string, Agg>();
-  const ensure = (adId: string): Agg => {
-    let a = byAd.get(adId);
-    if (!a) {
-      a = { crmLeads: 0, buyers: new Set(), revenue: 0 };
-      byAd.set(adId, a);
-    }
-    return a;
-  };
-  for (const l of leads) if (l.ad_id) ensure(l.ad_id).crmLeads += 1;
   for (const s of salesRows) {
     if (!s.lead_id) continue;
     const adId = adByLead.get(s.lead_id);
     if (!adId) continue;
-    const a = ensure(adId);
+    let a = byAd.get(adId);
+    if (!a) {
+      a = { buyers: new Set(), revenue: 0 };
+      byAd.set(adId, a);
+    }
     a.revenue += Number(s.amount);
     a.buyers.add(s.lead_id);
   }
 
-  // Объявления курса (воронка продаж) + наши продажи по ним
+  // Объявления курса (воронка продаж). Лиды — из Meta, продажи — из CRM.
   const courseAds = live.campaigns.filter((c) => c.objective === "course");
   const base = courseAds.map((c) => {
     const a = byAd.get(c.id);
-    const spendKzt = Number(c.spend) * usdRate;
-    const crmLeads = a?.crmLeads ?? 0;
+    const spendUsd = Number(c.spend);
+    const adLeads = Number(c.leads);
+    const revenue = a?.revenue ?? 0;
+    const spendKzt = spendUsd * usdRate;
+    const th = thumbs.get(c.id);
     return {
       id: c.id,
       name: c.name,
       status: c.status,
+      thumb: th?.thumb ?? null,
+      full: th?.full ?? null,
+      spendUsd,
       spendKzt,
-      crmLeads,
+      leads: adLeads,
       buyers: a?.buyers.size ?? 0,
-      revenue: a?.revenue ?? 0,
-      cpl: crmLeads > 0 ? spendKzt / crmLeads : null,
+      revenue,
+      cplUsd: adLeads > 0 ? spendUsd / adLeads : null,
+      roas: spendKzt > 0 ? revenue / spendKzt : null,
     };
   });
 
-  const totalSpend = base.reduce((s, r) => s + r.spendKzt, 0);
-  const totalLeads = base.reduce((s, r) => s + r.crmLeads, 0);
+  const totalSpendUsd = base.reduce((s, r) => s + r.spendUsd, 0);
+  const totalSpendKzt = totalSpendUsd * usdRate;
+  const totalLeads = base.reduce((s, r) => s + r.leads, 0);
   const totalBuyers = base.reduce((s, r) => s + r.buyers, 0);
   const totalRevenue = base.reduce((s, r) => s + r.revenue, 0);
-  const avgCpl = totalLeads > 0 ? totalSpend / totalLeads : null;
+  const avgCpl = totalLeads > 0 ? totalSpendUsd / totalLeads : null;
 
   const rows: CreativeRow[] = base
     .map((r) => {
-      const { verdict, hint } = classifyCreative(r.spendKzt, r.crmLeads, r.buyers, r.revenue, avgCpl);
+      const { verdict, hint } = classifyCreative(r.spendUsd, r.leads, r.buyers, r.roas, r.cplUsd, avgCpl);
       return { ...r, verdict, verdictHint: hint };
     })
-    .sort((a, b) => b.revenue - a.revenue || b.spendKzt - a.spendKzt);
+    .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads || b.spendUsd - a.spendUsd);
 
-  const roas = totalSpend > 0 ? totalRevenue / totalSpend : null;
-  const cpa = totalBuyers > 0 ? totalSpend / totalBuyers : null;
-  const cpl = avgCpl;
+  const roas = totalSpendKzt > 0 ? totalRevenue / totalSpendKzt : null;
+  const cpaUsd = totalBuyers > 0 ? totalSpendUsd / totalBuyers : null;
+  const cplUsd = avgCpl;
   const conversion = totalLeads > 0 ? (totalBuyers / totalLeads) * 100 : null;
 
-  // Лучший (по выручке) и слабый (по слитому расходу) креатив — для плашки
-  const best = rows.filter((r) => r.verdict === "top").sort((a, b) => b.revenue - a.revenue)[0] ?? null;
-  const worst = rows.filter((r) => r.verdict === "weak").sort((a, b) => b.spendKzt - a.spendKzt)[0] ?? null;
+  // Лучший (по продажам/лидам) и слабый (по слитому расходу) креатив — для плашки
+  const best = rows
+    .filter((r) => r.verdict === "top")
+    .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads)[0] ?? null;
+  const worst = rows
+    .filter((r) => r.verdict === "weak")
+    .sort((a, b) => b.spendUsd - a.spendUsd)[0] ?? null;
 
   const exportRows = rows.map((r) => [
     r.name,
-    r.crmLeads,
-    r.cpl != null ? Math.round(r.cpl) : "—",
+    r.leads,
+    r.cplUsd != null ? r.cplUsd.toFixed(2) : "—",
     r.buyers,
     Math.round(r.revenue),
-    Math.round(r.spendKzt),
-    r.spendKzt > 0 ? (r.revenue / r.spendKzt).toFixed(2) : "—",
+    r.spendUsd.toFixed(2),
+    r.roas != null ? r.roas.toFixed(2) : "—",
     VERDICT_META[r.verdict].label,
   ]);
 
@@ -205,11 +212,11 @@ export default async function CreativesPage({
           <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <MetricCard
               label="Расход на курс"
-              value={formatCurrencyShort(totalSpend)}
-              hint={`курс $ = ${usdRate} ₸`}
+              value={formatUsd(totalSpendUsd, 2)}
+              hint={`≈ ${formatCurrencyShort(totalSpendKzt)} · курс 1 $ = ${usdRate} ₸`}
               icon={Megaphone}
             />
-            <MetricCard label="Лиды (CRM)" value={formatNumber(totalLeads)} icon={Users} />
+            <MetricCard label="Лиды (Meta)" value={formatNumber(totalLeads)} icon={Users} />
             <MetricCard label="Продажи" value={formatNumber(totalBuyers)} icon={ShoppingBag} />
             <MetricCard label="Выручка" value={formatCurrencyShort(totalRevenue)} accent icon={Coins} />
           </div>
@@ -217,8 +224,8 @@ export default async function CreativesPage({
           <div className="mb-6 flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted">Итоги по курсу:</span>
             <Metric label="ROAS · возврат на рекламу" value={roas != null ? `${roas.toFixed(1).replace(".", ",")}x` : "—"} />
-            <Metric label="CPA · за продажу" value={cpa != null ? formatCurrency(cpa) : "—"} />
-            <Metric label="CPL · за лид" value={cpl != null ? formatCurrency(cpl) : "—"} />
+            <Metric label="CPA · за продажу" value={cpaUsd != null ? formatUsd(cpaUsd, 2) : "—"} />
+            <Metric label="CPL · за лид" value={cplUsd != null ? formatUsd(cplUsd, 2) : "—"} />
             <Metric label="Конверсия в продажу" value={conversion != null ? formatPercent(conversion) : "—"} />
           </div>
 
@@ -229,9 +236,11 @@ export default async function CreativesPage({
                   <div className="text-xs font-medium text-brand-ink">🏆 Лучший креатив</div>
                   <div className="mt-1 font-semibold text-ink">{best.name}</div>
                   <div className="mt-1 text-sm text-muted">
-                    {formatNumber(best.buyers)} продаж · {formatCurrency(best.revenue)} выручки
-                    {best.spendKzt > 0 &&
-                      ` · ROAS ${(best.revenue / best.spendKzt).toFixed(1).replace(".", ",")}x`}
+                    {best.buyers > 0
+                      ? `${formatNumber(best.buyers)} продаж · ${formatCurrency(best.revenue)} выручки${
+                          best.roas != null ? ` · ROAS ${best.roas.toFixed(1).replace(".", ",")}x` : ""
+                        }`
+                      : `${formatNumber(best.leads)} лидов · цена лида ${best.cplUsd != null ? formatUsd(best.cplUsd, 2) : "—"}`}
                   </div>
                 </div>
               )}
@@ -240,7 +249,7 @@ export default async function CreativesPage({
                   <div className="text-xs font-medium text-red-600">⚠️ Слабый креатив</div>
                   <div className="mt-1 font-semibold text-ink">{worst.name}</div>
                   <div className="mt-1 text-sm text-muted">
-                    Расход {formatCurrency(worst.spendKzt)} · {formatNumber(worst.crmLeads)} лидов · {worst.verdictHint}
+                    Расход {formatUsd(worst.spendUsd, 2)} · {formatNumber(worst.leads)} лидов · {worst.verdictHint}
                   </div>
                 </div>
               )}
@@ -248,16 +257,21 @@ export default async function CreativesPage({
           )}
 
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted">
-              {rows.length > 0
-                ? `${formatNumber(rows.length)} объявлений · ${range.label}`
-                : `За период «${range.label}» данных по объявлениям нет`}
-              {" · продажи учтены по лидам, пришедшим с объявления за период"}
-            </p>
+            <div className="text-xs text-muted">
+              <p>
+                {rows.length > 0
+                  ? `${formatNumber(rows.length)} объявлений · ${range.label}`
+                  : `За период «${range.label}» данных по объявлениям нет`}
+              </p>
+              <p className="mt-0.5">
+                Расход и цена лида — в долларах (валюта кабинета). Итого расход ≈ {formatCurrency(totalSpendKzt)} по курсу{" "}
+                1 $ = {usdRate} ₸. Продажи привязываются к креативу по заявкам с форм Meta (Lead Ads).
+              </p>
+            </div>
             {rows.length > 0 && (
               <ExportButton
                 filename={`creatives-${projectId.slice(0, 8)}`}
-                headers={["Объявление", "Лиды", "Цена лида ₸", "Продажи", "Выручка ₸", "Расход ₸", "ROAS", "Оценка"]}
+                headers={["Объявление", "Лиды", "Цена лида $", "Продажи", "Выручка ₸", "Расход $", "ROAS", "Оценка"]}
                 rows={exportRows}
               />
             )}
