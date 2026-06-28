@@ -93,7 +93,7 @@ export default async function CallsPage({ params }: { params: Promise<{ projectI
       {status?.connected && (
         <>
           <div className="mb-6">
-            <CallAnalyzeForm projectId={projectId} employees={employees} />
+            <CallAnalyzeForm projectId={projectId} employees={employees} asrConnected={status.asrConnected} />
           </div>
 
           {averages.length > 0 && (
