@@ -36,6 +36,8 @@ export function CallAnalyzeForm({
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  // Если текст получен из аудио — для учёта расхода (минуты Whisper)
+  const [audioSeconds, setAudioSeconds] = useState<number | null>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -66,10 +68,11 @@ export function CallAnalyzeForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId, path: up.path }),
       });
-      const json = (await res.json()) as { text?: string; error?: string };
+      const json = (await res.json()) as { text?: string; seconds?: number; error?: string };
       if (!res.ok) {
         setUploadErr(json.error ?? "Ошибка распознавания");
       } else {
+        setAudioSeconds(typeof json.seconds === "number" ? json.seconds : 0);
         setTranscript((prev) => (prev.trim() ? `${prev}\n${json.text ?? ""}` : json.text ?? ""));
       }
     } catch {
@@ -83,7 +86,11 @@ export function CallAnalyzeForm({
     setError(null);
     setResult(null);
     start(async () => {
-      const r = await analyzeCall(projectId, employeeId, transcript);
+      const opts =
+        audioSeconds !== null
+          ? { source: "audio" as const, audioSeconds }
+          : { source: "text" as const };
+      const r = await analyzeCall(projectId, employeeId, transcript, opts);
       if (!r.ok) {
         setError(r.error ?? "Ошибка анализа");
         return;

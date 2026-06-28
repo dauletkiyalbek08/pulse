@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveRole } from "@/lib/queries";
-import { decryptSecret } from "@/lib/crypto";
+import { resolveCallAi } from "@/lib/platform-config";
 import { transcribeAudio } from "@/lib/asr";
 
 const ANALYZE_ROLES = ["owner", "director", "head_sales", "manager"];
@@ -35,20 +35,10 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const { data: cfg } = await admin
-    .from("call_ai_config")
-    .select("asr_key_enc, asr_model")
-    .eq("project_id", projectId)
-    .maybeSingle();
-  if (!cfg?.asr_key_enc) {
+  // Ключ распознавания: проектный override → платформенный
+  const resolved = await resolveCallAi(projectId);
+  if (!resolved.asrKey) {
     return NextResponse.json({ error: "Распознавание речи не подключено" }, { status: 400 });
-  }
-
-  let key: string;
-  try {
-    key = decryptSecret(cfg.asr_key_enc);
-  } catch {
-    return NextResponse.json({ error: "Не удалось расшифровать ключ" }, { status: 500 });
   }
 
   const { data: blob, error: dlError } = await admin.storage.from("call-audio").download(path);
@@ -58,8 +48,8 @@ export async function POST(req: NextRequest) {
 
   const filename = path.split("/").pop() ?? "audio.m4a";
   try {
-    const text = await transcribeAudio(key, cfg.asr_model, blob, filename);
-    return NextResponse.json({ text });
+    const { text, durationSec } = await transcribeAudio(resolved.asrKey, resolved.asrModel, blob, filename);
+    return NextResponse.json({ text, seconds: durationSec });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Ошибка распознавания" },

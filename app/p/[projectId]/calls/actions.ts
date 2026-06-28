@@ -6,7 +6,7 @@ import type { Json } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveRole } from "@/lib/queries";
-import { encryptSecret, decryptSecret } from "@/lib/crypto";
+import { encryptSecret } from "@/lib/crypto";
 import {
   verifyKey,
   analyzeTranscript,
@@ -15,6 +15,7 @@ import {
   type CallResult,
 } from "@/lib/call-analysis";
 import { verifyAsrKey } from "@/lib/asr";
+import { resolveCallAi, getCallAiAvailability } from "@/lib/platform-config";
 
 const MANAGE_ROLES = ["owner", "director", "head_sales"];
 const ANALYZE_ROLES = ["owner", "director", "head_sales", "manager"];
@@ -24,33 +25,39 @@ async function roleOf(projectId: string): Promise<string | null> {
 }
 
 export interface CallAiStatus {
-  connected: boolean;
+  connected: boolean; // DeepSeek доступен (платформенный или проектный ключ)
   model: string;
-  status: string;
-  lastError: string | null;
+  usingPlatformKey: boolean; // источник DeepSeek — платформа
+  hasProjectKey: boolean; // у проекта есть свой ключ DeepSeek
   salesRules: string;
   hunterRules: string;
-  asrConnected: boolean;
+  asrConnected: boolean; // распознавание речи доступно
   asrModel: string;
+  usingPlatformAsr: boolean;
+  hasProjectAsr: boolean;
+  lastError: string | null;
 }
 
-export async function getCallAiStatus(projectId: string): Promise<CallAiStatus | null> {
+export async function getCallAiStatus(projectId: string): Promise<CallAiStatus> {
+  const a = await getCallAiAvailability(projectId);
   const admin = createAdminClient();
   const { data } = await admin
     .from("call_ai_config")
-    .select("model, status, last_error, sales_rules, hunter_rules, asr_key_enc, asr_model")
+    .select("last_error")
     .eq("project_id", projectId)
     .maybeSingle();
-  if (!data) return null;
   return {
-    connected: true,
-    model: data.model,
-    status: data.status,
-    lastError: data.last_error,
-    salesRules: data.sales_rules || DEFAULT_RULES.sales,
-    hunterRules: data.hunter_rules || DEFAULT_RULES.hunter,
-    asrConnected: !!data.asr_key_enc,
-    asrModel: data.asr_model,
+    connected: a.deepseekReady,
+    model: a.deepseekModel,
+    usingPlatformKey: a.usingPlatformKey,
+    hasProjectKey: a.hasProjectKey,
+    salesRules: a.salesRules,
+    hunterRules: a.hunterRules,
+    asrConnected: a.asrReady,
+    asrModel: a.asrModel,
+    usingPlatformAsr: a.usingPlatformAsr,
+    hasProjectAsr: a.hasProjectAsr,
+    lastError: data?.last_error ?? null,
   };
 }
 
@@ -112,14 +119,11 @@ export interface UploadUrlResult {
 /** Подписанная ссылка для загрузки аудио в хранилище (минуя лимит тела запроса). */
 export async function createAudioUpload(projectId: string, ext: string): Promise<UploadUrlResult> {
   if (!ANALYZE_ROLES.includes((await roleOf(projectId)) ?? "")) return { ok: false, error: "Недостаточно прав" };
-  const admin = createAdminClient();
-  const { data: cfg } = await admin
-    .from("call_ai_config")
-    .select("asr_key_enc")
-    .eq("project_id", projectId)
-    .maybeSingle();
-  if (!cfg?.asr_key_enc) return { ok: false, error: "Распознавание речи не подключено" };
+  // Ключ распознавания: проектный override → платформенный
+  const resolved = await resolveCallAi(projectId);
+  if (!resolved.asrKey) return { ok: false, error: "Распознавание речи не подключено" };
 
+  const admin = createAdminClient();
   const safeExt = (ext || "m4a").replace(/[^a-z0-9]/gi, "").slice(0, 8) || "m4a";
   const path = `${projectId}/${randomUUID()}.${safeExt}`;
   const { data, error } = await admin.storage.from("call-audio").createSignedUploadUrl(path);
@@ -194,10 +198,13 @@ export async function updateCallRules(
 ): Promise<{ ok: boolean }> {
   if (!MANAGE_ROLES.includes((await roleOf(projectId)) ?? "")) return { ok: false };
   const admin = createAdminClient();
+  // upsert: проект может работать на платформенных ключах и хранить только правила
   await admin
     .from("call_ai_config")
-    .update({ sales_rules: salesRules.trim(), hunter_rules: hunterRules.trim() })
-    .eq("project_id", projectId);
+    .upsert(
+      { project_id: projectId, sales_rules: salesRules.trim(), hunter_rules: hunterRules.trim() },
+      { onConflict: "project_id" },
+    );
   revalidatePath(`/p/${projectId}/calls`);
   return { ok: true };
 }
@@ -221,6 +228,7 @@ export async function analyzeCall(
   projectId: string,
   employeeId: string,
   transcript: string,
+  opts?: { audioSeconds?: number | null; source?: "text" | "audio" },
 ): Promise<AnalyzeResult> {
   if (!ANALYZE_ROLES.includes((await roleOf(projectId)) ?? "")) return { ok: false, error: "Недостаточно прав" };
   if (!employeeId) return { ok: false, error: "Выберите сотрудника" };
@@ -228,12 +236,14 @@ export async function analyzeCall(
   if (text.length < 30) return { ok: false, error: "Слишком короткий текст разговора" };
 
   const admin = createAdminClient();
-  const { data: cfg } = await admin
-    .from("call_ai_config")
-    .select("model, api_key_enc, sales_rules, hunter_rules")
-    .eq("project_id", projectId)
-    .maybeSingle();
-  if (!cfg) return { ok: false, error: "Сначала подключите DeepSeek" };
+  // Ключ DeepSeek + правила: проектный override → платформенный
+  const resolved = await resolveCallAi(projectId);
+  if (!resolved.deepseekKey) {
+    return {
+      ok: false,
+      error: "ИИ-анализ не настроен. Владелец платформы должен добавить ключ DeepSeek в «Настройках платформы».",
+    };
+  }
 
   // Роль сотрудника в проекте → тип разговора
   const { data: member } = await admin
@@ -243,21 +253,13 @@ export async function analyzeCall(
     .eq("user_id", employeeId)
     .maybeSingle();
   const role: CallRole = member?.role === "hunter" ? "hunter" : "sales";
-  const rules = role === "hunter" ? cfg.hunter_rules : cfg.sales_rules;
-
-  let apiKey: string;
-  try {
-    apiKey = decryptSecret(cfg.api_key_enc);
-  } catch {
-    return { ok: false, error: "Не удалось расшифровать ключ" };
-  }
+  const rules = role === "hunter" ? resolved.hunterRules : resolved.salesRules;
 
   let result: CallResult;
   try {
-    result = await analyzeTranscript(apiKey, cfg.model, role, rules, text);
+    result = await analyzeTranscript(resolved.deepseekKey, resolved.deepseekModel, role, rules, text);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Ошибка анализа";
-    await admin.from("call_ai_config").update({ status: "error", last_error: msg }).eq("project_id", projectId);
     return { ok: false, error: msg };
   }
 
@@ -279,15 +281,12 @@ export async function analyzeCall(
       issues: result.issues,
       recommendations: result.recommendations,
       summary: result.summary,
+      source: opts?.source ?? "text",
+      audio_seconds: opts?.audioSeconds ?? null,
       created_by: user?.id ?? null,
     })
     .select("id")
     .maybeSingle();
-
-  await admin
-    .from("call_ai_config")
-    .update({ status: "connected", last_error: null })
-    .eq("project_id", projectId);
 
   revalidatePath(`/p/${projectId}/calls`);
   return { ok: true, id: inserted?.id, result };

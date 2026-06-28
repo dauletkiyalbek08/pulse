@@ -22,16 +22,24 @@ export async function verifyAsrKey(apiKey: string): Promise<void> {
   }
 }
 
-/** Распознать аудиофайл в текст. */
+export interface Transcription {
+  text: string;
+  /** Длительность аудио в секундах (для учёта расхода). 0 — если неизвестна. */
+  durationSec: number;
+}
+
+/** Распознать аудиофайл в текст (+ длительность для учёта расхода). */
 export async function transcribeAudio(
   apiKey: string,
   model: string,
   file: Blob,
   filename: string,
-): Promise<string> {
+): Promise<Transcription> {
   const form = new FormData();
   form.append("file", file, filename);
   form.append("model", model || "whisper-1");
+  // verbose_json возвращает длительность распознанного аудио
+  form.append("response_format", "verbose_json");
 
   const res = await fetch(OPENAI_TRANSCRIBE, {
     method: "POST",
@@ -39,9 +47,13 @@ export async function transcribeAudio(
     body: form,
     cache: "no-store",
   });
-  const json = (await res.json()) as { text?: string; error?: { message?: string } };
+  const json = (await res.json()) as {
+    text?: string;
+    duration?: number;
+    error?: { message?: string };
+  };
   if (!res.ok || json.error) {
     throw new Error(json.error?.message ?? `Ошибка распознавания (HTTP ${res.status})`);
   }
-  return json.text ?? "";
+  return { text: json.text ?? "", durationSec: Math.round(Number(json.duration) || 0) };
 }

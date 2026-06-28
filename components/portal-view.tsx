@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Search, LogOut } from "lucide-react";
+import Link from "next/link";
+import { Search, LogOut, Settings } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { ProjectCard } from "@/components/project-card";
 import { CreateProjectCard } from "@/components/create-project-card";
@@ -57,6 +58,15 @@ export function PortalView({ projects, canCreate = false, user }: PortalViewProp
               <div className="text-sm font-semibold text-ink">{user.name}</div>
               <div className="text-xs text-muted">{roleLabel(user.role)}</div>
             </div>
+            {canCreate && (
+              <Link
+                href="/settings"
+                title="Настройки платформы"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition hover:bg-canvas hover:text-ink"
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
+            )}
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-ink">
               {initials}
             </span>

@@ -614,7 +614,7 @@ export type Database = {
       }
       call_ai_config: {
         Row: {
-          api_key_enc: string
+          api_key_enc: string | null
           asr_key_enc: string | null
           asr_model: string
           connected_by: string | null
@@ -628,7 +628,7 @@ export type Database = {
           status: string
         }
         Insert: {
-          api_key_enc: string
+          api_key_enc?: string | null
           asr_key_enc?: string | null
           asr_model?: string
           connected_by?: string | null
@@ -642,7 +642,7 @@ export type Database = {
           status?: string
         }
         Update: {
-          api_key_enc?: string
+          api_key_enc?: string | null
           asr_key_enc?: string | null
           asr_model?: string
           connected_by?: string | null
@@ -674,6 +674,7 @@ export type Database = {
       }
       call_analyses: {
         Row: {
+          audio_seconds: number | null
           created_at: string
           created_by: string | null
           criteria: Json
@@ -685,11 +686,13 @@ export type Database = {
           project_id: string
           recommendations: Json
           role_type: string
+          source: string
           strengths: Json
           summary: string | null
           transcript: string
         }
         Insert: {
+          audio_seconds?: number | null
           created_at?: string
           created_by?: string | null
           criteria?: Json
@@ -701,11 +704,13 @@ export type Database = {
           project_id: string
           recommendations?: Json
           role_type?: string
+          source?: string
           strengths?: Json
           summary?: string | null
           transcript: string
         }
         Update: {
+          audio_seconds?: number | null
           created_at?: string
           created_by?: string | null
           criteria?: Json
@@ -717,6 +722,7 @@ export type Database = {
           project_id?: string
           recommendations?: Json
           role_type?: string
+          source?: string
           strengths?: Json
           summary?: string | null
           transcript?: string
@@ -748,6 +754,44 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_config: {
+        Row: {
+          asr_model: string
+          deepseek_key_enc: string | null
+          deepseek_model: string
+          id: number
+          openai_key_enc: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          asr_model?: string
+          deepseek_key_enc?: string | null
+          deepseek_model?: string
+          id?: number
+          openai_key_enc?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          asr_model?: string
+          deepseek_key_enc?: string | null
+          deepseek_model?: string
+          id?: number
+          openai_key_enc?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_config_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

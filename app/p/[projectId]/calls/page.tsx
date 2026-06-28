@@ -27,6 +27,7 @@ export default async function CallsPage({ params }: { params: Promise<{ projectI
   const admin = createAdminClient();
   const role = await getEffectiveRole(projectId);
   const canManage = MANAGE_ROLES.includes(role ?? "");
+  const isOwner = role === "owner";
 
   const status = await getCallAiStatus(projectId);
 
@@ -87,7 +88,7 @@ export default async function CallsPage({ params }: { params: Promise<{ projectI
       <PageHeader title="Анализ звонков" subtitle="ИИ-оценка разговоров по правилам отдела (DeepSeek)" />
 
       <div className="mb-6">
-        <CallAiSettings projectId={projectId} status={status} canManage={canManage} />
+        <CallAiSettings projectId={projectId} status={status} canManage={canManage} isOwner={isOwner} />
       </div>
 
       {status?.connected && (
