@@ -31,7 +31,7 @@ const EDUCATION_MENU: MenuSection[] = [
       { label: "Клиенты", segment: "clients", icon: "clients" },
       { label: "Анализ звонков", segment: "calls", icon: "calls" },
       { label: "Hunter-кабинет", segment: "hunter", icon: "hunter" },
-      { label: "Менеджеры/Учителя", segment: "team", icon: "team" },
+      { label: "Менеджеры", segment: "team", icon: "team" },
     ],
   },
   {
