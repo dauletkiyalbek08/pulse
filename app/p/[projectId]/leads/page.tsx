@@ -3,11 +3,32 @@ import { getProject, requireAccess, getEffectiveRole } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
 import { getCohortFunnel } from "@/lib/funnel";
 import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { NewLeadForm } from "@/components/new-lead-form";
 import { LeadsTable, type LeadRow } from "@/components/leads-table";
+import { ExportButton } from "@/components/export-button";
+
+const SOURCE_LABEL: Record<string, string> = {
+  meta: "Meta",
+  facebook: "Meta",
+  instagram: "Meta",
+  tiktok: "TikTok",
+  site: "Сайт/Квиз",
+  other: "Другое",
+};
+const STATUS_LABEL: Record<string, string> = {
+  new: "Новый",
+  qualified: "Квалифицирован",
+  processed: "Обработан",
+  trial: "Пробный",
+  trial_done: "Пробный пройден",
+  assigned: "Назначен",
+  paid: "Оплатил",
+  sale: "Продажа",
+  lost: "Потерян",
+};
 
 export default async function LeadsPage({
   params,
@@ -28,7 +49,7 @@ export default async function LeadsPage({
   // Хантер видит только свои лиды
   let leadsQuery = supabase
     .from("leads")
-    .select("id, full_name, phone, source, status, assigned_to, value, created_at, external_id")
+    .select("id, full_name, phone, source, status, assigned_to, value, created_at, external_id, note")
     .eq("project_id", projectId)
     .gte("created_at", range.from)
     .lt("created_at", rangeEndExclusive(range))
@@ -69,15 +90,45 @@ export default async function LeadsPage({
   // Кто может отмечать покупку (и запускать CAPI): продажи ведут менеджеры/руководство.
   const canSell = ["owner", "director", "head_sales", "manager"].includes(role ?? "");
 
+  // Данные для экспорта в CSV (по текущему периоду; хантер — только свои).
+  const exportHeaders = [
+    "Дата",
+    "Имя",
+    "Телефон",
+    "Источник",
+    "Статус",
+    "Ответственный",
+    "Сумма",
+    "Заметка / Ответы квиза",
+  ];
+  const exportRows: (string | number)[][] = leadRows.map((l) => [
+    formatDateTime(l.created_at),
+    l.full_name ?? "",
+    l.phone ?? "",
+    SOURCE_LABEL[l.source ?? ""] ?? l.source ?? "",
+    STATUS_LABEL[l.status] ?? l.status,
+    l.assigned_to ? nameById.get(l.assigned_to) ?? "" : "",
+    l.value ?? 0,
+    (l.note ?? "").replace(/\s*\n\s*/g, " | "),
+  ]);
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <PageHeader title="Лиды" subtitle={`Период: ${range.label}`}>
-        <DateRangePicker
-          preset={range.preset}
-          from={range.from}
-          to={range.to}
-          label={range.label}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportButton
+            filename={`leads-${range.from}_${range.to}`}
+            headers={exportHeaders}
+            rows={exportRows}
+            label="Экспорт CSV"
+          />
+          <DateRangePicker
+            preset={range.preset}
+            from={range.from}
+            to={range.to}
+            label={range.label}
+          />
+        </div>
       </PageHeader>
 
       <div className="mb-6 flex flex-wrap gap-2.5">
