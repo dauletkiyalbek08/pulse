@@ -54,6 +54,14 @@ export async function getCohortFunnel(
     ];
   }
 
+  if (niche === "custom") {
+    return [
+      { label: "Лиды пришли", value: total },
+      { label: "В работе", value: has("assigned", "paid") },
+      { label: "Купили", value: has("paid") },
+    ];
+  }
+
   return [
     { label: "Лиды пришли", value: total },
     { label: "Отработано", value: has("assigned", "trial", "trial_done", "paid") },

@@ -3,7 +3,7 @@
  * воронку и — на следующих этапах — состав меню и метрики дашборда.
  */
 
-export type Niche = "education" | "ecommerce";
+export type Niche = "education" | "ecommerce" | "custom";
 
 export interface NicheTemplate {
   key: Niche;
@@ -34,14 +34,34 @@ export const NICHES: Record<Niche, NicheTemplate> = {
     icon: "shopping",
     accent: "#f97316",
   },
+  custom: {
+    key: "custom",
+    label: "Своя ниша",
+    tagline: "Любой бизнес — разделы настраиваются под себя",
+    funnel: ["Лид", "В работе", "Продажа"],
+    icon: "custom",
+    accent: "#6366f1",
+  },
 };
 
 export const NICHE_LIST: NicheTemplate[] = Object.values(NICHES);
 
 export function isNiche(value: string): value is Niche {
-  return value === "education" || value === "ecommerce";
+  return value === "education" || value === "ecommerce" || value === "custom";
 }
 
 export function getNiche(value: string | null | undefined): NicheTemplate {
   return value && isNiche(value) ? NICHES[value] : NICHES.education;
+}
+
+/**
+ * Подпись ниши для отображения (сайдбар, топбар): для «своей ниши» — введённое
+ * владельцем название (niche_label), иначе подпись шаблона.
+ */
+export function nicheDisplayLabel(
+  niche: string | null | undefined,
+  nicheLabel?: string | null,
+): string {
+  if (niche === "custom" && nicheLabel && nicheLabel.trim()) return nicheLabel.trim();
+  return getNiche(niche).label;
 }

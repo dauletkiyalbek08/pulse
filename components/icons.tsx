@@ -38,6 +38,7 @@ import {
 export const PROJECT_ICONS: Record<string, LucideIcon> = {
   graduation: GraduationCap,
   shopping: ShoppingBag,
+  custom: Layers,
 };
 
 export function getProjectIcon(key: string | null | undefined): LucideIcon {

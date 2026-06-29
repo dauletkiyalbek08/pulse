@@ -14,11 +14,14 @@ export async function createProject(
 ): Promise<NewProjectState> {
   const name = String(formData.get("name") ?? "").trim();
   const niche = String(formData.get("niche") ?? "");
+  const nicheLabel = String(formData.get("niche_label") ?? "").trim();
   const director = String(formData.get("director_name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
 
   if (!name) return { error: "Введите название проекта" };
   if (!isNiche(niche)) return { error: "Выберите нишу проекта" };
+  if (niche === "custom" && !nicheLabel)
+    return { error: "Укажите название своей ниши (например, «Фитнес»)" };
 
   const supabase = await createClient();
   const {
@@ -43,6 +46,7 @@ export async function createProject(
       owner_id: user.id,
       name,
       niche,
+      niche_label: niche === "custom" ? nicheLabel : null,
       director_name: director || null,
       description: description || null,
       icon: template.icon,
@@ -60,7 +64,7 @@ export async function createProject(
     project_id: project.id,
     actor_id: user.id,
     action: "project.created",
-    details: { name, niche },
+    details: { name, niche, niche_label: niche === "custom" ? nicheLabel : null },
   });
 
   redirect("/");

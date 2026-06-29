@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProject, getEffectiveRole } from "@/lib/queries";
-import { getNiche } from "@/lib/niches";
+import { getNiche, nicheDisplayLabel } from "@/lib/niches";
 import { getMenu, filterMenuByModules } from "@/lib/menu";
 import { filterMenuByRole } from "@/lib/access";
 import { Sidebar } from "@/components/sidebar";
@@ -35,6 +35,7 @@ export default async function ProjectLayout({
   if (!project) notFound();
 
   const niche = getNiche(project.niche);
+  const nicheLabel = nicheDisplayLabel(project.niche, project.niche_label);
   const enabledMenu = filterMenuByModules(getMenu(niche.key), project.modules);
   const sections = filterMenuByRole(enabledMenu, role);
 
@@ -51,7 +52,7 @@ export default async function ProjectLayout({
       <div className="flex min-h-screen flex-col lg:pl-[260px]">
         <ProjectTopbar
           projectName={project.name}
-          nicheLabel={niche.label}
+          nicheLabel={nicheLabel}
           accent={project.accent_color ?? "#10b981"}
           icon={project.icon}
           projectId={project.id}

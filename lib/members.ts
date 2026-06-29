@@ -33,17 +33,27 @@ export const PROJECT_ROLES = [
 
 /** Какие роли можно создавать в проекте этой ниши (ТЗ, разделы 4-5). */
 export function rolesForNiche(niche: Niche): string[] {
-  return niche === "ecommerce"
-    ? ["director", "manager", "marketer", "accountant"]
-    : [
-        "director",
-        "head_sales",
-        "manager",
-        "hunter",
-        "teacher",
-        "marketer",
-        "targetologist",
-        "smm",
-        "accountant",
-      ];
+  if (niche === "ecommerce") return ["director", "manager", "marketer", "accountant"];
+  // «Своя ниша» — общий набор без образовательной специфики (хантер/учитель).
+  if (niche === "custom")
+    return [
+      "director",
+      "head_sales",
+      "manager",
+      "marketer",
+      "targetologist",
+      "smm",
+      "accountant",
+    ];
+  return [
+    "director",
+    "head_sales",
+    "manager",
+    "hunter",
+    "teacher",
+    "marketer",
+    "targetologist",
+    "smm",
+    "accountant",
+  ];
 }

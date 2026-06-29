@@ -23,16 +23,25 @@ const ECOMMERCE_STATUS: Record<string, { label: string; tone: PillTone }> = {
   lost: { label: "Потерян", tone: "danger" },
 };
 
+// «Своя ниша» — универсальный пайплайн без образовательной специфики.
+const CUSTOM_STATUS: Record<string, { label: string; tone: PillTone }> = {
+  new: { label: "Новый", tone: "neutral" },
+  assigned: { label: "В работе", tone: "info" },
+  paid: { label: "Оплатил", tone: "success" },
+  lost: { label: "Потерян", tone: "danger" },
+};
+
 export function getLeadStatusMeta(niche: Niche, status: string) {
-  const map = niche === "ecommerce" ? ECOMMERCE_STATUS : EDUCATION_STATUS;
+  const map =
+    niche === "ecommerce" ? ECOMMERCE_STATUS : niche === "custom" ? CUSTOM_STATUS : EDUCATION_STATUS;
   return map[status] ?? { label: status, tone: "neutral" as PillTone };
 }
 
 /** Полный порядок статусов воронки (включая «Потерян») — колонки канбана, фильтр. */
 export function leadStatusOrder(niche: Niche): string[] {
-  return niche === "ecommerce"
-    ? ["new", "processed", "paid", "lost"]
-    : ["new", "assigned", "trial", "trial_done", "paid", "lost"];
+  if (niche === "ecommerce") return ["new", "processed", "paid", "lost"];
+  if (niche === "custom") return ["new", "assigned", "paid", "lost"];
+  return ["new", "assigned", "trial", "trial_done", "paid", "lost"];
 }
 
 /** Следующий шаг по лиду в статусе (подсказка на карточке канбана). */

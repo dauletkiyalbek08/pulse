@@ -63,6 +63,26 @@ export function NewProjectForm() {
         </div>
       </fieldset>
 
+      {/* Название своей ниши — только для «Своя ниша» */}
+      {niche === "custom" && (
+        <div>
+          <label className="text-sm font-medium text-ink" htmlFor="niche_label">
+            Название ниши
+          </label>
+          <input
+            id="niche_label"
+            name="niche_label"
+            type="text"
+            required
+            placeholder="Например, Фитнес, Барбершоп, Кафе"
+            className="mt-1.5 w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-faint focus:border-brand focus:outline-none"
+          />
+          <p className="mt-1.5 text-xs text-faint">
+            Проект откроется со всеми разделами — лишние выключите в «Настройки → Разделы проекта».
+          </p>
+        </div>
+      )}
+
       {/* Название */}
       <div>
         <label className="text-sm font-medium text-ink" htmlFor="name">

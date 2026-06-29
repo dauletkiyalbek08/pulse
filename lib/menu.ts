@@ -103,8 +103,67 @@ const ECOMMERCE_MENU: MenuSection[] = [
   },
 ];
 
+// «Своя ниша»: общий набор разделов (без специфики образования — без пробных
+// уроков и Hunter-кабинета). Владелец включает нужное тумблерами в Настройках.
+const GENERAL_MENU: MenuSection[] = [
+  {
+    title: "Обзор",
+    items: [{ label: "Главная", segment: "", icon: "home" }],
+  },
+  {
+    title: "Продажи и CRM",
+    items: [
+      { label: "Лиды", segment: "leads", icon: "leads" },
+      { label: "CRM-воронка", segment: "funnel", icon: "funnel" },
+      { label: "Продажи", segment: "sales", icon: "sales" },
+      { label: "Клиенты", segment: "clients", icon: "clients" },
+      { label: "Анализ звонков", segment: "calls", icon: "calls" },
+      { label: "Команда", segment: "team", icon: "team" },
+    ],
+  },
+  {
+    title: "Маркетинг",
+    items: [
+      { label: "Реклама", segment: "ads", icon: "ads" },
+      { label: "Аналитика креативов", segment: "creatives", icon: "creatives" },
+      { label: "Marketing Dashboard", segment: "marketing", icon: "marketing" },
+      { label: "SMM Studio", segment: "smm", icon: "smm" },
+      { label: "CAPI", segment: "capi", icon: "capi" },
+      { label: "Ресурсы/Воронки", segment: "resources", icon: "resources" },
+      { label: "AI Studio", segment: "ai", icon: "ai" },
+    ],
+  },
+  {
+    title: "Автоматизация",
+    items: [
+      { label: "ChatBot Builder", segment: "chatbot", icon: "chatbot" },
+      { label: "Интеграции", segment: "integrations", icon: "integrations" },
+    ],
+  },
+  {
+    title: "Финансы и HR",
+    items: [
+      { label: "Финансы", segment: "finance", icon: "finance" },
+      { label: "Зарплаты", segment: "salaries", icon: "salaries" },
+      { label: "Посещаемость", segment: "attendance", icon: "attendance" },
+      { label: "Графики работы", segment: "schedules", icon: "schedules" },
+      { label: "Договоры", segment: "contracts", icon: "contracts" },
+    ],
+  },
+  {
+    title: "Система",
+    items: [
+      { label: "Отчёты", segment: "reports", icon: "reports" },
+      { label: "Настройки", segment: "settings", icon: "settings" },
+      { label: "Права доступа", segment: "access", icon: "access" },
+    ],
+  },
+];
+
 export function getMenu(niche: Niche): MenuSection[] {
-  return niche === "ecommerce" ? ECOMMERCE_MENU : EDUCATION_MENU;
+  if (niche === "ecommerce") return ECOMMERCE_MENU;
+  if (niche === "custom") return GENERAL_MENU;
+  return EDUCATION_MENU;
 }
 
 /**
@@ -152,7 +211,7 @@ export function filterMenuByModules(
 
 /** Подпись раздела по сегменту пути (для страницы-заглушки). */
 export function labelForSegment(segment: string): string {
-  for (const menu of [EDUCATION_MENU, ECOMMERCE_MENU]) {
+  for (const menu of [EDUCATION_MENU, ECOMMERCE_MENU, GENERAL_MENU]) {
     for (const section of menu) {
       const item = section.items.find((i) => i.segment === segment);
       if (item) return item.label;

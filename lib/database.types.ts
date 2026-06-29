@@ -530,6 +530,7 @@ export type Database = {
           modules: string[] | null
           name: string
           niche: string
+          niche_label: string | null
           office_address: string | null
           office_lat: number | null
           office_lng: number | null
@@ -550,6 +551,7 @@ export type Database = {
           modules?: string[] | null
           name: string
           niche: string
+          niche_label?: string | null
           office_address?: string | null
           office_lat?: number | null
           office_lng?: number | null
@@ -570,6 +572,7 @@ export type Database = {
           modules?: string[] | null
           name?: string
           niche?: string
+          niche_label?: string | null
           office_address?: string | null
           office_lat?: number | null
           office_lng?: number | null
