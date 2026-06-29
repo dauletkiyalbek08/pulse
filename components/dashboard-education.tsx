@@ -8,6 +8,7 @@ import {
   GraduationCap,
   Percent,
 } from "lucide-react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { aggregateMetrics } from "@/lib/metrics";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
@@ -17,7 +18,14 @@ import { FunnelCard } from "@/components/funnel-card";
 import { TopList } from "@/components/top-list";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { getCohortFunnel } from "@/lib/funnel";
-import type { DateRange } from "@/lib/date-range";
+import { getCallQuality } from "@/lib/call-quality";
+import { rangeEndExclusive, type DateRange } from "@/lib/date-range";
+
+function qualityColor(s: number): string {
+  if (s >= 80) return "text-emerald-600";
+  if (s >= 60) return "text-amber-600";
+  return "text-red-600";
+}
 
 const QUALIFYING_STATUSES = ["assigned", "trial", "trial_done", "paid"];
 
@@ -71,6 +79,8 @@ export async function DashboardEducation({
     revenue: Number(r.revenue),
     adSpend: Number(r.ad_spend),
   }));
+
+  const quality = await getCallQuality(projectId, range.from, rangeEndExclusive(range));
 
   const memberIds = (members ?? []).map((m) => m.user_id);
   const { data: profiles } = memberIds.length
@@ -171,6 +181,47 @@ export async function DashboardEducation({
           <h2 className="mb-5 text-base font-semibold text-ink">Топ менеджеров</h2>
           <TopList items={topManagers} />
         </div>
+      </div>
+
+      {/* Качество звонков (из раздела «Анализ звонков») */}
+      <div className="mt-6 rounded-card bg-surface p-6 shadow-soft ring-1 ring-line">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Качество звонков</h2>
+            <p className="mt-0.5 text-xs text-faint">Средняя ИИ-оценка разговоров отдела за период</p>
+          </div>
+          <Link
+            href={`/p/${projectId}/calls`}
+            className="text-sm font-medium text-brand-ink transition hover:underline"
+          >
+            Открыть анализ звонков →
+          </Link>
+        </div>
+        {quality.count === 0 ? (
+          <p className="mt-4 text-sm text-muted">
+            За период разборов звонков нет — загрузите записи в разделе «Анализ звонков».
+          </p>
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-x-10 gap-y-4">
+            <div>
+              <div className={`text-3xl font-bold ${qualityColor(quality.avg)}`}>
+                {quality.avg}
+                <span className="text-lg text-faint">/100</span>
+              </div>
+              <div className="mt-0.5 text-xs text-muted">средний балл</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold text-ink">{formatNumber(quality.count)}</div>
+              <div className="mt-0.5 text-xs text-muted">разборов</div>
+            </div>
+            <div>
+              <div className={`text-3xl font-bold ${quality.below ? "text-red-600" : "text-ink"}`}>
+                {formatNumber(quality.below)}
+              </div>
+              <div className="mt-0.5 text-xs text-muted">ниже порога (60)</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

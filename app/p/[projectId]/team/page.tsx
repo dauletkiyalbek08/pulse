@@ -4,10 +4,18 @@ import { roleLabel } from "@/lib/members";
 import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
 import { formatNumber, formatPercent, formatCurrencyShort } from "@/lib/format";
 import { localDate } from "@/lib/attendance";
+import { getCallQuality } from "@/lib/call-quality";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Avatar } from "@/components/avatar";
 import { Pill } from "@/components/pill";
+import type { PillTone } from "@/lib/leads";
+
+function callTone(s: number): PillTone {
+  if (s >= 80) return "success";
+  if (s >= 60) return "warning";
+  return "danger";
+}
 
 interface Metrics {
   trials: number; // проведено пробных уроков
@@ -65,6 +73,13 @@ export default async function TeamPage({
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const onShift = new Set((openShifts ?? []).map((s) => s.user_id));
 
+  // Качество звонков за период (из «Анализа звонков»)
+  const quality = await getCallQuality(projectId, range.from, rangeEndExclusive(range));
+  const callPill = (uid: string) => {
+    const q = quality.byEmployee.get(uid);
+    return q ? <Pill tone={callTone(q.avg)}>Звонки {q.avg}</Pill> : null;
+  };
+
   // Уроки по менеджеру + итог по отделу
   const tByUser = new Map<string, { trials: number; purchased: number }>();
   const dep: Metrics = { trials: 0, purchased: 0, sales: 0, revenue: 0 };
@@ -117,8 +132,9 @@ export default async function TeamPage({
               {ropName ? `${ropName} · РОП` : "Итого по отделу"}
             </div>
           </div>
-          <div className="text-right text-xs text-muted">
-            {formatNumber(activeManagers.length)} менеджеров
+          <div className="flex items-center gap-2">
+            {quality.count > 0 && <Pill tone={callTone(quality.avg)}>Звонки {quality.avg}</Pill>}
+            <span className="text-xs text-muted">{formatNumber(activeManagers.length)} менеджеров</span>
           </div>
         </div>
         <Chips m={dep} />
@@ -141,6 +157,7 @@ export default async function TeamPage({
                       <div className="truncate font-semibold text-ink">{name}</div>
                       <div className="text-xs text-muted">{roleLabel(m.role)}</div>
                     </div>
+                    {callPill(m.user_id)}
                     {onShift.has(m.user_id) && <Pill tone="success">На смене</Pill>}
                   </div>
                   <Chips m={metricsFor(m.user_id)} />
