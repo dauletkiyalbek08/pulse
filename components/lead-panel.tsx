@@ -109,6 +109,17 @@ export function LeadPanel({
             />
           </div>
 
+          {lead.note && (
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-faint">
+                Анкета · ответы квиза
+              </div>
+              <div className="whitespace-pre-wrap rounded-lg bg-canvas p-3 text-sm text-ink ring-1 ring-line">
+                {lead.note}
+              </div>
+            </div>
+          )}
+
           <div>
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-faint">
               Статус

@@ -25,7 +25,7 @@ export default async function FunnelPage({
 
   let leadsQuery = supabase
     .from("leads")
-    .select("id, full_name, phone, source, status, value, assigned_to")
+    .select("id, full_name, phone, source, status, value, assigned_to, note")
     .eq("project_id", projectId)
     .gte("created_at", range.from)
     .lt("created_at", rangeEndExclusive(range))
@@ -53,6 +53,7 @@ export default async function FunnelPage({
     status: l.status,
     value: l.value,
     assigneeName: l.assigned_to ? nameById.get(l.assigned_to) ?? null : null,
+    note: l.note,
   }));
 
   const pipelineTotal = rows.reduce((s, l) => s + Number(l.value ?? 0), 0);

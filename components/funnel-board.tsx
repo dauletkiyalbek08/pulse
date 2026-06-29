@@ -17,6 +17,7 @@ export interface BoardLead {
   status: string;
   value: number | null;
   assigneeName: string | null;
+  note: string | null;
 }
 
 const DOT: Record<string, string> = {

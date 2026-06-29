@@ -62,7 +62,7 @@ export default async function HunterPage({
 
   const listBase = supabase
     .from("leads")
-    .select("id, full_name, phone, source, status, value, assigned_to, created_at")
+    .select("id, full_name, phone, source, status, value, assigned_to, created_at, note")
     .eq("project_id", projectId)
     .in("status", activeStatuses)
     .order("created_at", { ascending: false })
@@ -107,6 +107,7 @@ export default async function HunterPage({
     status: l.status,
     value: l.value,
     assigneeName: l.assigned_to ? nameById.get(l.assigned_to) ?? null : null,
+    note: l.note,
   }));
 
   return (
