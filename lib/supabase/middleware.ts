@@ -3,6 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
 
 const PUBLIC_PATHS = ["/login"];
+// Полностью открытые маршруты (доступны всем, без редиректов в обе стороны):
+// публичные лендинги-воронки для рекламного трафика.
+const OPEN_PREFIXES = ["/l"];
 
 /**
  * Обновляет сессию Supabase на каждом запросе и охраняет маршруты:
@@ -42,6 +45,11 @@ export async function updateSession(request: NextRequest) {
 
   // API-маршруты (вебхуки и т.п.) сами отвечают за авторизацию — не редиректим.
   if (path.startsWith("/api/")) {
+    return supabaseResponse;
+  }
+
+  // Открытые лендинги — доступны всем (в т.ч. анонимному рекламному трафику), без редиректов.
+  if (OPEN_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {
     return supabaseResponse;
   }
 

@@ -796,6 +796,59 @@ export type Database = {
           },
         ]
       }
+      landings: {
+        Row: {
+          accent: string
+          bullets: Json
+          button_text: string
+          created_at: string
+          id: string
+          pixel_id: string | null
+          project_id: string
+          slug: string
+          status: string
+          subtitle: string
+          thanks_text: string
+          title: string
+        }
+        Insert: {
+          accent?: string
+          bullets?: Json
+          button_text?: string
+          created_at?: string
+          id?: string
+          pixel_id?: string | null
+          project_id: string
+          slug: string
+          status?: string
+          subtitle?: string
+          thanks_text?: string
+          title?: string
+        }
+        Update: {
+          accent?: string
+          bullets?: Json
+          button_text?: string
+          created_at?: string
+          id?: string
+          pixel_id?: string | null
+          project_id?: string
+          slug?: string
+          status?: string
+          subtitle?: string
+          thanks_text?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       capi_config: {
         Row: {
           connected_by: string | null
