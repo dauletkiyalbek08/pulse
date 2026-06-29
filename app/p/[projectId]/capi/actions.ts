@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveRole } from "@/lib/queries";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
-import { verifyDataset, sendPurchase } from "@/lib/capi";
+import { verifyDataset, sendPurchase, type PurchaseInput } from "@/lib/capi";
 
 const MANAGE_ROLES = ["owner", "director", "marketer", "targetologist"];
 
@@ -153,19 +153,20 @@ export async function sendCapiTest(projectId: string): Promise<TestResult> {
     .maybeSingle();
   if (!cfg) return { ok: false, error: "Сначала подключите датасет" };
 
-  // Нужен лид с рекламы (external_id = leadgen_id) — иначе привязывать не к чему.
+  // Последний лид, к которому есть к чему привязаться:
+  //  - Lead Ads: external_id (leadgen_id);  - сайт/лендинг: fbc/fbp.
   const { data: lead } = await admin
     .from("leads")
-    .select("id, external_id")
+    .select("id, external_id, fbc, fbp, phone")
     .eq("project_id", projectId)
-    .not("external_id", "is", null)
+    .or("external_id.not.is.null,fbc.not.is.null,fbp.not.is.null")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!lead?.external_id) {
+  if (!lead) {
     return {
       ok: false,
-      error: "Нет лида с рекламы (с lead_id) для теста. Тест появится после первой реальной заявки с формы Meta.",
+      error: "Нет лида с метками рекламы. Оставьте заявку через лендинг (или форму Meta), затем повторите тест.",
     };
   }
 
@@ -177,12 +178,10 @@ export async function sendCapiTest(projectId: string): Promise<TestResult> {
   }
 
   const eventId = `test-${randomUUID()}`;
-  const res = await sendPurchase(
-    cfg.dataset_id,
-    token,
-    { leadId: lead.external_id, value: 1, currency: "KZT", eventId },
-    cfg.test_event_code,
-  );
+  const input: PurchaseInput = lead.external_id
+    ? { leadId: lead.external_id, value: 1, currency: "KZT", eventId }
+    : { fbc: lead.fbc, fbp: lead.fbp, phone: lead.phone, value: 1, currency: "KZT", eventId };
+  const res = await sendPurchase(cfg.dataset_id, token, input, cfg.test_event_code);
 
   await admin.from("capi_events").insert({
     project_id: projectId,
@@ -208,7 +207,31 @@ export async function sendCapiTest(projectId: string): Promise<TestResult> {
   return {
     ok: true,
     message: cfg.test_event_code
-      ? `Отправлено (events_received=${res.received}). Открой Test Events в Meta — событие появится там.`
-      : `Отправлено (events_received=${res.received}).`,
+      ? `Отправлено (events_received=${res.received}). Открой «Тестирование событий» в Meta — событие появится там.`
+      : `Отправлено (events_received=${res.received}). Без тест-кода событие идёт в общий поток, не в Test Events.`,
   };
+}
+
+/** Задать/убрать тест-код события без переподключения (токен не трогаем). */
+export async function setCapiTestCode(
+  projectId: string,
+  code: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  const admin = createAdminClient();
+  const { data: cfg } = await admin
+    .from("capi_config")
+    .select("project_id")
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (!cfg) return { ok: false, error: "Сначала подключите датасет" };
+
+  const { error } = await admin
+    .from("capi_config")
+    .update({ test_event_code: code.trim() || null })
+    .eq("project_id", projectId);
+  if (error) return { ok: false, error: "Не удалось сохранить тест-код" };
+
+  revalidatePath(`/p/${projectId}/capi`);
+  return { ok: true };
 }

@@ -7,6 +7,7 @@ import {
   connectCapi,
   disconnectCapi,
   sendCapiTest,
+  setCapiTestCode,
   type CapiStatus,
 } from "@/app/p/[projectId]/capi/actions";
 import { formatDateTime } from "@/lib/format";
@@ -56,6 +57,18 @@ export function CapiIntegration({
     });
   }
 
+  function saveTestCode() {
+    setMsg(null);
+    start(async () => {
+      const res = await setCapiTestCode(projectId, testCode);
+      if (!res.ok) setMsg({ kind: "err", text: res.error ?? "Ошибка" });
+      else {
+        setMsg({ kind: "ok", text: testCode.trim() ? "Тест-код сохранён" : "Тест-код убран (боевой режим)" });
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <div className="rounded-card bg-surface p-5 shadow-soft ring-1 ring-line">
       <div className="mb-4 flex items-center gap-2">
@@ -80,10 +93,6 @@ export function CapiIntegration({
               tone={status.status === "error" ? "err" : "ok"}
             />
             <Field
-              label="Тестовый код"
-              value={status.testEventCode || "не задан (боевой режим)"}
-            />
-            <Field
               label="Последнее событие"
               value={status.lastEventAt ? formatDateTime(status.lastEventAt) : "—"}
             />
@@ -94,6 +103,32 @@ export function CapiIntegration({
               Последняя ошибка: {status.lastError}
             </p>
           )}
+
+          {/* Тест-код события: задаётся без переподключения */}
+          <div className="mb-4 rounded-lg bg-canvas px-3 py-3 ring-1 ring-line">
+            <label className="mb-1 block text-xs text-muted">
+              Тестовый код события (Test Event Code)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={testCode}
+                onChange={(e) => setTestCode(e.target.value)}
+                placeholder="TEST12345 — для «Тестирование событий» в Meta"
+                className="min-w-[200px] flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-brand focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={saveTestCode}
+                disabled={pending}
+                className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink transition hover:bg-canvas disabled:opacity-60"
+              >
+                Сохранить
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-faint">
+              С кодом события видно сразу в «Тестирование событий». Для боевого режима — очистите поле и сохраните.
+            </p>
+          </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <button
