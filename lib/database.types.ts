@@ -796,6 +796,105 @@ export type Database = {
           },
         ]
       }
+      document_templates: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          id: string
+          is_sample: boolean
+          name: string
+          project_id: string
+        }
+        Insert: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          is_sample?: boolean
+          name: string
+          project_id: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          is_sample?: boolean
+          name?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_templates_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          created_by: string | null
+          employee_id: string | null
+          id: string
+          project_id: string
+          status: string
+          template_id: string | null
+          title: string
+        }
+        Insert: {
+          body?: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string | null
+          id?: string
+          project_id: string
+          status?: string
+          template_id?: string | null
+          title: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string | null
+          id?: string
+          project_id?: string
+          status?: string
+          template_id?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "document_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       landings: {
         Row: {
           accent: string
