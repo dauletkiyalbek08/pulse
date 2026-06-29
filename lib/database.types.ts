@@ -799,6 +799,56 @@ export type Database = {
           },
         ]
       }
+      smm_posts: {
+        Row: {
+          body: string | null
+          created_at: string
+          created_by: string | null
+          format: string
+          goal: string
+          id: string
+          project_id: string
+          publish_date: string | null
+          rubric: string
+          status: string
+          title: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          format?: string
+          goal?: string
+          id?: string
+          project_id: string
+          publish_date?: string | null
+          rubric?: string
+          status?: string
+          title: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          format?: string
+          goal?: string
+          id?: string
+          project_id?: string
+          publish_date?: string | null
+          rubric?: string
+          status?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smm_posts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_generations: {
         Row: {
           created_at: string
