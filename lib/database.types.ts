@@ -799,6 +799,47 @@ export type Database = {
           },
         ]
       }
+      ai_generations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          input: Json
+          output: string
+          project_id: string
+          title: string
+          tool: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          input?: Json
+          output?: string
+          project_id: string
+          title?: string
+          tool: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          input?: Json
+          output?: string
+          project_id?: string
+          title?: string
+          tool?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_generations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_templates: {
         Row: {
           body: string
