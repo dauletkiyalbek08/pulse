@@ -318,6 +318,7 @@ export type Database = {
           form_id: string | null
           full_name: string
           id: string
+          note: string | null
           phone: string | null
           project_id: string
           source: string | null
@@ -338,6 +339,7 @@ export type Database = {
           form_id?: string | null
           full_name: string
           id?: string
+          note?: string | null
           phone?: string | null
           project_id: string
           source?: string | null
@@ -358,6 +360,7 @@ export type Database = {
           form_id?: string | null
           full_name?: string
           id?: string
+          note?: string | null
           phone?: string | null
           project_id?: string
           source?: string | null
@@ -904,11 +907,16 @@ export type Database = {
           id: string
           pixel_id: string | null
           project_id: string
+          logo: string | null
+          questions: Json
           slug: string
+          socials: Json
+          start_button: string
           status: string
           subtitle: string
           thanks_text: string
           title: string
+          type: string
         }
         Insert: {
           accent?: string
@@ -916,13 +924,18 @@ export type Database = {
           button_text?: string
           created_at?: string
           id?: string
+          logo?: string | null
           pixel_id?: string | null
           project_id: string
+          questions?: Json
           slug: string
+          socials?: Json
+          start_button?: string
           status?: string
           subtitle?: string
           thanks_text?: string
           title?: string
+          type?: string
         }
         Update: {
           accent?: string
@@ -930,13 +943,18 @@ export type Database = {
           button_text?: string
           created_at?: string
           id?: string
+          logo?: string | null
           pixel_id?: string | null
           project_id?: string
+          questions?: Json
           slug?: string
+          socials?: Json
+          start_button?: string
           status?: string
           subtitle?: string
           thanks_text?: string
           title?: string
+          type?: string
         }
         Relationships: [
           {

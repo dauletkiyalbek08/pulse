@@ -3,8 +3,13 @@ import { Check } from "lucide-react";
 import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LandingForm } from "@/components/landing-form";
+import { QuizFunnel, type QuizSocials } from "@/components/quiz-funnel";
+import { parseQuestions } from "@/lib/quiz-sample";
 
 export const dynamic = "force-dynamic";
+
+const PIXEL_BASE = (id: string) =>
+  `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${id}');fbq('track','PageView');`;
 
 export async function generateMetadata({
   params,
@@ -23,7 +28,9 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
 
   const { data: landing } = await admin
     .from("landings")
-    .select("project_id, title, subtitle, bullets, button_text, thanks_text, accent, pixel_id, status")
+    .select(
+      "project_id, type, title, subtitle, bullets, button_text, thanks_text, accent, pixel_id, status, logo, start_button, questions, socials",
+    )
     .eq("slug", slug)
     .maybeSingle();
   if (!landing || landing.status !== "active") notFound();
@@ -35,20 +42,41 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
     .maybeSingle();
 
   const token = project?.site_token ?? "";
-  const bullets = Array.isArray(landing.bullets) ? (landing.bullets as string[]) : [];
   const accent = landing.accent || "#16a34a";
+  const pixel = landing.pixel_id ? (
+    <script dangerouslySetInnerHTML={{ __html: PIXEL_BASE(landing.pixel_id) }} />
+  ) : null;
+
+  if (landing.type === "quiz") {
+    const socials =
+      landing.socials && typeof landing.socials === "object"
+        ? (landing.socials as QuizSocials)
+        : {};
+    return (
+      <>
+        {pixel}
+        <QuizFunnel
+          token={token}
+          pixelId={landing.pixel_id}
+          logo={landing.logo}
+          title={landing.title}
+          subtitle={landing.subtitle}
+          startButton={landing.start_button}
+          questions={parseQuestions(landing.questions)}
+          buttonText={landing.button_text}
+          thanksText={landing.thanks_text}
+          accent={accent}
+          socials={socials}
+        />
+      </>
+    );
+  }
+
+  const bullets = Array.isArray(landing.bullets) ? (landing.bullets as string[]) : [];
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
-      {landing.pixel_id && (
-        <script
-          // Базовый код Meta Pixel: PageView + хранит метки _fbc/_fbp для CAPI
-          dangerouslySetInnerHTML={{
-            __html: `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${landing.pixel_id}');fbq('track','PageView');`,
-          }}
-        />
-      )}
-
+      {pixel}
       <div className="mx-auto flex max-w-2xl flex-col items-stretch gap-8 px-5 py-12 sm:py-20">
         <div className="text-center">
           <h1 className="text-3xl font-bold leading-tight text-gray-900 sm:text-4xl">{landing.title}</h1>

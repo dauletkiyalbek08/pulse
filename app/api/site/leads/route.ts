@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
   const name = pick(m, ["name", "имя", "fio", "фио"]);
   const phone = pick(m, ["phone", "телефон", "тел", "phone_number", "tel"]);
   const email = pick(m, ["email", "e-mail", "почта", "mail"]);
+  const note = pick(m, ["note", "quiz", "comment", "комментарий"]);
   let fbc = pick(m, ["fbc", "_fbc"]);
   const fbp = pick(m, ["fbp", "_fbp"]);
   const fbclid = pick(m, ["fbclid"]);
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
       status: "new",
       fbc: fbc || null,
       fbp: fbp || null,
+      note: note || null,
     })
     .select("id")
     .maybeSingle();

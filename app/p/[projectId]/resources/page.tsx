@@ -1,8 +1,14 @@
 import { Megaphone } from "lucide-react";
 import { requireAccess } from "@/lib/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { parseQuestions } from "@/lib/quiz-sample";
 import { PageHeader } from "@/components/page-header";
-import { LandingEditor, CreateLandingButton, type Landing } from "@/components/landing-editor";
+import {
+  LandingEditor,
+  CreateLandingButton,
+  CreateQuizButton,
+  type Landing,
+} from "@/components/landing-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +19,9 @@ export default async function ResourcesPage({ params }: { params: Promise<{ proj
   const admin = createAdminClient();
   const { data } = await admin
     .from("landings")
-    .select("id, slug, title, subtitle, bullets, button_text, thanks_text, accent, pixel_id, status")
+    .select(
+      "id, slug, title, subtitle, bullets, button_text, thanks_text, accent, pixel_id, status, type, questions, logo, socials, start_button",
+    )
     .eq("project_id", projectId)
     .order("created_at", { ascending: false });
 
@@ -28,28 +36,36 @@ export default async function ResourcesPage({ params }: { params: Promise<{ proj
     accent: l.accent,
     pixel_id: l.pixel_id,
     status: l.status,
+    type: l.type,
+    questions: parseQuestions(l.questions),
+    logo: l.logo,
+    socials: l.socials && typeof l.socials === "object" ? (l.socials as Landing["socials"]) : {},
+    start_button: l.start_button,
   }));
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
-      <PageHeader title="Ресурсы / Воронки" subtitle="Лендинги под таргет — заявки сразу в CRM и хантеру">
-        <CreateLandingButton projectId={projectId} />
+      <PageHeader title="Ресурсы / Воронки" subtitle="Лендинги и квизы под таргет — заявки сразу в CRM и хантеру">
+        <div className="flex flex-wrap gap-2">
+          <CreateQuizButton projectId={projectId} />
+          <CreateLandingButton projectId={projectId} />
+        </div>
       </PageHeader>
 
       <div className="mb-6 flex items-start gap-3 rounded-card border border-brand-soft bg-brand-soft/40 p-4">
         <Megaphone className="mt-0.5 h-5 w-5 shrink-0 text-brand-ink" />
         <p className="text-sm text-ink">
-          Создай лендинг, поставь его ссылку в рекламу. Заявки падают в раздел «Лиды» и
-          раздаются хантерам <span className="font-medium">по очереди</span>. Укажи Pixel ID
-          (из раздела CAPI) — события уйдут в Meta, и Purchase по продаже отправится
-          автоматически. Tilda не нужна.
+          <span className="font-medium">Квиз</span> — пошаговый опрос (как на Tilda), <span className="font-medium">лендинг</span> —
+          один экран с формой. Ставишь ссылку в рекламу → заявки падают в «Лиды» и раздаются хантерам
+          по очереди (ответы квиза сохраняются в лиде). Укажи Pixel ID — события уйдут в Meta, и Purchase
+          по продаже отправится автоматически. Tilda не нужна.
         </p>
       </div>
 
       {landings.length === 0 ? (
         <div className="rounded-card border border-dashed border-line bg-surface px-6 py-12 text-center text-sm text-muted">
-          Лендингов пока нет. Нажмите «Создать лендинг» — появится готовый шаблон, который
-          останется отредактировать под свой оффер.
+          Пока пусто. «Создать квиз» — готовый пример (диагностика английского) на казахском, который
+          останется отредактировать под себя.
         </div>
       ) : (
         <div className="space-y-4">

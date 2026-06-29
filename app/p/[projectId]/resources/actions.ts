@@ -6,6 +6,7 @@ import type { Json } from "@/lib/database.types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveRole } from "@/lib/queries";
 import { canAccess } from "@/lib/access";
+import { ARSEN_QUIZ, type QuizQuestion } from "@/lib/quiz-sample";
 
 async function canManage(projectId: string): Promise<boolean> {
   const role = await getEffectiveRole(projectId);
@@ -57,6 +58,43 @@ export async function createLanding(projectId: string): Promise<CreateLandingRes
   return { ok: true, id: data.id };
 }
 
+/** Создать квиз-воронку — заполнен примером (Arsen). */
+export async function createQuiz(projectId: string): Promise<CreateLandingResult> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  await ensureSiteToken(projectId);
+
+  const admin = createAdminClient();
+  let slug = randomSlug();
+  for (let i = 0; i < 5; i++) {
+    const { data: ex } = await admin.from("landings").select("id").eq("slug", slug).maybeSingle();
+    if (!ex) break;
+    slug = randomSlug();
+  }
+
+  const { data, error } = await admin
+    .from("landings")
+    .insert({
+      project_id: projectId,
+      slug,
+      type: "quiz",
+      title: ARSEN_QUIZ.title,
+      subtitle: ARSEN_QUIZ.subtitle,
+      start_button: ARSEN_QUIZ.startButton,
+      button_text: ARSEN_QUIZ.buttonText,
+      thanks_text: ARSEN_QUIZ.thanksText,
+      logo: ARSEN_QUIZ.logo,
+      questions: ARSEN_QUIZ.questions as unknown as Json,
+      socials: ARSEN_QUIZ.socials as unknown as Json,
+      accent: "#16a34a",
+    })
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { ok: false, error: "Не удалось создать квиз" };
+
+  revalidatePath(`/p/${projectId}/resources`);
+  return { ok: true, id: data.id };
+}
+
 export interface LandingPatch {
   title: string;
   subtitle: string;
@@ -67,6 +105,11 @@ export interface LandingPatch {
   pixel_id: string;
   slug: string;
   status: "active" | "draft";
+  type: "simple" | "quiz";
+  questions: QuizQuestion[];
+  logo: string;
+  socials: { instagram?: string; telegram?: string; tiktok?: string };
+  startButton: string;
 }
 
 export async function updateLanding(
@@ -97,6 +140,11 @@ export async function updateLanding(
       pixel_id: patch.pixel_id.trim() || null,
       slug,
       status: patch.status === "draft" ? "draft" : "active",
+      type: patch.type === "quiz" ? "quiz" : "simple",
+      questions: (patch.questions ?? []) as unknown as Json,
+      logo: patch.logo.trim() || null,
+      socials: (patch.socials ?? {}) as unknown as Json,
+      start_button: patch.startButton.trim() || "Бастау",
     })
     .eq("project_id", projectId)
     .eq("id", id);
