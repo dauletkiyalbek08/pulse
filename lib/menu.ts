@@ -107,6 +107,49 @@ export function getMenu(niche: Niche): MenuSection[] {
   return niche === "ecommerce" ? ECOMMERCE_MENU : EDUCATION_MENU;
 }
 
+/**
+ * Базовые разделы — всегда видны, их нельзя выключить:
+ * Главная (""), Настройки (settings), Права доступа (access).
+ */
+export const CORE_SEGMENTS = ["", "settings", "access"];
+
+export function isCoreSegment(segment: string): boolean {
+  return CORE_SEGMENTS.includes(segment);
+}
+
+/** Список разделов ниши, которые можно включать/выключать (без базовых), с группировкой. */
+export function toggleableSections(niche: Niche): MenuSection[] {
+  return getMenu(niche)
+    .map((s) => ({ ...s, items: s.items.filter((i) => !isCoreSegment(i.segment)) }))
+    .filter((s) => s.items.length > 0);
+}
+
+/** Полный набор включаемых сегментов ниши (= состояние «всё включено»). */
+export function defaultModules(niche: Niche): string[] {
+  return toggleableSections(niche).flatMap((s) => s.items.map((i) => i.segment));
+}
+
+/** Раздел включён для проекта? NULL modules = всё включено (дефолт ниши). */
+export function isModuleEnabled(modules: string[] | null | undefined, segment: string): boolean {
+  if (isCoreSegment(segment)) return true;
+  if (!modules) return true; // NULL → все разделы ниши по умолчанию
+  return modules.includes(segment);
+}
+
+/**
+ * Оставляет в меню только включённые для проекта разделы.
+ * modules = NULL → меню не меняется (все разделы ниши).
+ */
+export function filterMenuByModules(
+  sections: MenuSection[],
+  modules: string[] | null | undefined,
+): MenuSection[] {
+  if (!modules) return sections;
+  return sections
+    .map((s) => ({ ...s, items: s.items.filter((i) => isModuleEnabled(modules, i.segment)) }))
+    .filter((s) => s.items.length > 0);
+}
+
 /** Подпись раздела по сегменту пути (для страницы-заглушки). */
 export function labelForSegment(segment: string): string {
   for (const menu of [EDUCATION_MENU, ECOMMERCE_MENU]) {

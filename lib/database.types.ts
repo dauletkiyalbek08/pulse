@@ -527,6 +527,7 @@ export type Database = {
           director_name: string | null
           icon: string | null
           id: string
+          modules: string[] | null
           name: string
           niche: string
           office_address: string | null
@@ -546,6 +547,7 @@ export type Database = {
           director_name?: string | null
           icon?: string | null
           id?: string
+          modules?: string[] | null
           name: string
           niche: string
           office_address?: string | null
@@ -565,6 +567,7 @@ export type Database = {
           director_name?: string | null
           icon?: string | null
           id?: string
+          modules?: string[] | null
           name?: string
           niche?: string
           office_address?: string | null

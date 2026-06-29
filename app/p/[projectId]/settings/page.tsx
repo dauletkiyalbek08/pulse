@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProject, requireAccess } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
+import { toggleableSections, defaultModules } from "@/lib/menu";
 import { rolesForNiche, roleLabel } from "@/lib/members";
 import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/pill";
 import { NewEmployeeForm } from "@/components/new-employee-form";
 import { FireMemberForm } from "@/components/fire-member-form";
+import { ModuleToggles } from "@/components/module-toggles";
 import { TelegramConnect, type TgMember } from "@/components/telegram-connect";
 import { formatDate } from "@/lib/format";
 
@@ -43,6 +45,9 @@ export default async function SettingsPage({
   const active = rows.filter((m) => m.status === "active");
   const fired = rows.filter((m) => m.status === "fired");
 
+  const moduleSections = toggleableSections(niche.key);
+  const enabledModules = project?.modules ?? defaultModules(niche.key);
+
   const tgMembers: TgMember[] = active.map((m) => ({
     userId: m.user_id,
     name: nameById.get(m.user_id) ?? "—",
@@ -76,6 +81,15 @@ export default async function SettingsPage({
         </a>
         .
       </p>
+
+      {/* Разделы проекта — включение/выключение пунктов меню */}
+      <section className="mb-8">
+        <ModuleToggles
+          projectId={projectId}
+          sections={moduleSections}
+          enabled={enabledModules}
+        />
+      </section>
 
       {/* Telegram-бот */}
       <section className="mb-8">

@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canAccess } from "@/lib/access";
+import { isModuleEnabled } from "@/lib/menu";
 
 /**
  * Проект, закэшированный на время одного запроса (React cache).
@@ -12,7 +13,7 @@ export const getProject = cache(async (projectId: string) => {
   const { data } = await supabase
     .from("projects")
     .select(
-      "id, name, niche, icon, accent_color, owner_id, office_lat, office_lng, office_radius_m, office_address",
+      "id, name, niche, icon, accent_color, owner_id, modules, office_lat, office_lng, office_radius_m, office_address",
     )
     .eq("id", projectId)
     .maybeSingle();
@@ -61,4 +62,7 @@ export async function requireAccess(projectId: string, segment: string) {
   const role = await getEffectiveRole(projectId);
   if (!role) redirect("/");
   if (!canAccess(role, segment)) redirect(`/p/${projectId}`);
+  // Раздел выключен для этого проекта владельцем/директором — закрываем по URL тоже.
+  const project = await getProject(projectId);
+  if (!isModuleEnabled(project?.modules, segment)) redirect(`/p/${projectId}`);
 }

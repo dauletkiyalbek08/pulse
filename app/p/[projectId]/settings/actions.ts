@@ -3,6 +3,9 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getEffectiveRole } from "@/lib/queries";
+import { canAccess } from "@/lib/access";
 import { PROJECT_ROLES } from "@/lib/members";
 
 const VALID_ROLES: readonly string[] = PROJECT_ROLES;
@@ -105,4 +108,26 @@ export async function fireEmployee(
   await supabase.rpc("fire_member", { p_member_id: memberId });
 
   revalidatePath(`/p/${projectId}/settings`);
+}
+
+/**
+ * Включение/выключение разделов меню для конкретного проекта.
+ * Доступно владельцу платформы и директору проекта (у них доступ к "settings").
+ * Базовые разделы (Главная/Настройки/Права доступа) выключить нельзя — фильтр в lib/menu.
+ */
+export async function setProjectModules(
+  projectId: string,
+  modules: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  const role = await getEffectiveRole(projectId);
+  if (!canAccess(role, "settings")) return { ok: false, error: "Недостаточно прав" };
+
+  const clean = Array.from(new Set(modules.filter((s) => typeof s === "string")));
+  const admin = createAdminClient();
+  const { error } = await admin.from("projects").update({ modules: clean }).eq("id", projectId);
+  if (error) return { ok: false, error: "Не удалось сохранить разделы" };
+
+  // Меню рендерится в layout — обновляем весь раздел проекта.
+  revalidatePath(`/p/${projectId}`, "layout");
+  return { ok: true };
 }

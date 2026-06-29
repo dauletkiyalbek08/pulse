@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProject, getEffectiveRole } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
-import { getMenu } from "@/lib/menu";
+import { getMenu, filterMenuByModules } from "@/lib/menu";
 import { filterMenuByRole } from "@/lib/access";
 import { Sidebar } from "@/components/sidebar";
 import { ProjectTopbar } from "@/components/project-topbar";
@@ -35,7 +35,8 @@ export default async function ProjectLayout({
   if (!project) notFound();
 
   const niche = getNiche(project.niche);
-  const sections = filterMenuByRole(getMenu(niche.key), role);
+  const enabledMenu = filterMenuByModules(getMenu(niche.key), project.modules);
+  const sections = filterMenuByRole(enabledMenu, role);
 
   return (
     <div className="min-h-screen">
