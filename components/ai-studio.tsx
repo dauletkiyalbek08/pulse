@@ -8,12 +8,14 @@ import {
   Sparkles,
   Megaphone,
   Video,
+  Film,
   ListChecks,
   MessagesSquare,
   Copy,
   Check,
   Trash2,
   Settings2,
+  Clapperboard,
 } from "lucide-react";
 import { TOOLS, type AiTool } from "@/lib/ai-studio";
 import { generate, deleteGeneration } from "@/app/p/[projectId]/ai/actions";
@@ -22,6 +24,7 @@ import { formatDateTime } from "@/lib/format";
 const ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   megaphone: Megaphone,
   video: Video,
+  film: Film,
   list: ListChecks,
   messages: MessagesSquare,
   sparkles: Sparkles,
@@ -122,6 +125,19 @@ export function AiStudio({
 
   return (
     <div className="space-y-6">
+      {/* Видео/фото-креативы — подключение по проекту (скоро) */}
+      <div className="flex flex-wrap items-center gap-3 rounded-card border border-brand-soft bg-brand-soft/40 p-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
+          <Clapperboard className="h-5 w-5" />
+        </span>
+        <p className="min-w-0 flex-1 text-sm text-ink">
+          <span className="font-medium">Генерация видео- и фото-креативов</span> (Higgsfield и др.) подключается
+          <span className="font-medium"> по проекту</span> — отдельной подпиской на видео-ИИ. Добавим сюда, когда у
+          проекта будет доступ. Уже сейчас работает <span className="font-medium">«Видео-сценарий (одно лицо)»</span> —
+          DeepSeek собирает сценарий и связанные промты с одним лицом для вашего видео-ИИ.
+        </p>
+      </div>
+
       {/* Выбор инструмента */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {TOOLS.map((t) => {
