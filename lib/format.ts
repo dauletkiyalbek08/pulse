@@ -5,6 +5,11 @@
 
 export const DEFAULT_CURRENCY = "₸";
 
+// Часовой пояс отображения дат: все проекты в Казахстане (UTC+5).
+// Без него серверный рендер (Vercel/UTC) показывал бы время на 5 часов раньше.
+// Позже можно вынести в настройки проекта.
+const TIMEZONE = "Asia/Almaty";
+
 const ruNumber = new Intl.NumberFormat("ru-RU");
 
 /** Денежная сумма: «1 234 567 ₸» (целые тенге, неразрывный пробел перед знаком). */
@@ -43,6 +48,7 @@ export function formatPercent(value: number, digits = 1): string {
 export function formatDate(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: TIMEZONE,
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -52,6 +58,7 @@ export function formatDate(date: string | Date): string {
 export function formatDateTime(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: TIMEZONE,
     day: "2-digit",
     month: "short",
     hour: "2-digit",
