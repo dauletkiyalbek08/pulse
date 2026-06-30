@@ -8,10 +8,11 @@ import { Pill } from "@/components/pill";
 import type { PillTone } from "@/lib/leads";
 import { formatDateTime } from "@/lib/format";
 
+// Пробные уроки онлайн, проводят менеджеры — статусы под онлайн-формат.
 const TRIAL_STATUS: Record<string, { label: string; tone: PillTone }> = {
-  scheduled: { label: "Записан", tone: "info" },
-  attended: { label: "Пришёл", tone: "success" },
-  no_show: { label: "Не пришёл", tone: "warning" },
+  scheduled: { label: "Запланирован", tone: "info" },
+  attended: { label: "Проведён", tone: "success" },
+  no_show: { label: "Не явился", tone: "warning" },
   purchased: { label: "Купил после", tone: "violet" },
 };
 

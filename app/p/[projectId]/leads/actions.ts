@@ -30,8 +30,8 @@ export async function createLead(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Равная раздача: лид падает хантеру на смене (или остаётся свободным)
-  const assignedTo = await pickNextHunter(supabase, projectId);
+  // Равная раздача: лид падает хантеру на смене; если никого нет — любому активному
+  const assignedTo = await pickNextHunter(supabase, projectId, undefined, { fallbackToAll: true });
 
   const { data: lead, error } = await supabase
     .from("leads")

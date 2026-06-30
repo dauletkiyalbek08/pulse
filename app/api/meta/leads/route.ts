@@ -96,8 +96,8 @@ async function handleLeadgen(admin: Admin, pageId: string, value: LeadgenValue) 
     .maybeSingle();
   if (!inserted) return;
 
-  // Раздача хантеру на смене (round-robin) + уведомление в Telegram
-  const hunter = await pickNextHunter(admin, projectId);
+  // Раздача хантеру (round-robin): на смене → любому активному + уведомление в Telegram
+  const hunter = await pickNextHunter(admin, projectId, undefined, { fallbackToAll: true });
   if (hunter) await assignLead(admin, projectId, inserted.id, hunter);
 }
 

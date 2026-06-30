@@ -595,16 +595,30 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     return;
   }
 
-  // Начать смену без геолокации (для десктопа / когда офис не задан)
+  // Начать смену без геолокации — только если у проекта НЕ задан офис.
+  // Если офис задан — начать смену можно лишь по геолокации (подтверждение офиса).
   if (text === "🟢 Начать смену" || text === "/smena") {
+    const { data: proj } = await admin
+      .from("projects")
+      .select("office_lat, office_lng")
+      .eq("id", link.project_id)
+      .maybeSingle();
+    const officeSet = proj?.office_lat != null && proj?.office_lng != null;
+
+    if (officeSet) {
+      await sendMessage(
+        chatId,
+        "📍 Чтобы начать смену, подтвердите, что вы в офисе — нажмите «📍 Я в офисе (геолокация)» и отправьте локацию.",
+        { replyMarkup: shiftKeyboard() },
+      );
+      return;
+    }
+
     const res = await startShift(admin, link.project_id, link.user_id, null, null);
     if (res.already) {
       await sendMessage(chatId, "Вы уже на смене ✅");
     } else {
-      await sendMessage(
-        chatId,
-        "✅ Смена начата. Лиды будут приходить по очереди.\nЧтобы подтвердить, что вы в офисе, отправьте 📍 геолокацию с телефона.",
-      );
+      await sendMessage(chatId, "✅ Смена начата. Лиды будут приходить по очереди.");
     }
     return;
   }
