@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Activity, Loader2, Users } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
+import { LogoMark } from "@/components/logo";
 import { login, type LoginState } from "./actions";
 
 const initialState: LoginState = { error: null };
@@ -35,8 +36,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand text-white shadow-soft">
-            <Activity className="h-6 w-6" strokeWidth={2.5} />
+          <span className="mb-4 inline-block overflow-hidden rounded-2xl shadow-soft">
+            <LogoMark className="h-14 w-14" />
           </span>
           <h1 className="text-2xl font-bold tracking-tight text-ink">
             Вход в Pulse
