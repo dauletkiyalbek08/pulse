@@ -70,7 +70,7 @@ export function shiftKeyboard() {
     keyboard: [
       [{ text: "🟢 Начать смену" }],
       [{ text: "📍 Я в офисе (геолокация)", request_location: true }],
-      [{ text: "🔚 Ушёл" }],
+      [{ text: "💵 Моя зарплата" }, { text: "🔚 Ушёл" }],
     ],
     resize_keyboard: true,
   };
@@ -79,7 +79,10 @@ export function shiftKeyboard() {
 /** Клавиатура менеджера: оформить продажу. */
 export function saleKeyboard() {
   return {
-    keyboard: [[{ text: "💰 Оформить продажу" }]],
+    keyboard: [
+      [{ text: "💰 Оформить продажу" }],
+      [{ text: "💵 Моя зарплата" }],
+    ],
     resize_keyboard: true,
   };
 }

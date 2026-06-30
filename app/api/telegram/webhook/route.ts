@@ -4,6 +4,14 @@ import { haversineMeters } from "@/lib/geo";
 import { reassignLead } from "@/lib/lead-dispatch";
 import { recordPurchase, type CapiOutcome } from "@/lib/purchase";
 import {
+  currentPeriod,
+  periodLabel,
+  periodBounds,
+  accruedBase,
+  payrollTotal,
+  PAYROLL_STATUS,
+} from "@/lib/finance";
+import {
   sendMessage,
   answerCallback,
   editMessageText,
@@ -84,6 +92,79 @@ function saleConfirmText(name: string, amount: number, capi: CapiOutcome): strin
           ? "\n⚠️ Покупка записана, но событие в Meta не ушло (ошибка CAPI)."
           : "";
   return base + tail;
+}
+
+const money = (n: number | string) => `${Math.round(Number(n)).toLocaleString("ru-RU")} ₸`;
+
+/** Личный расчёт зарплаты/бонуса сотрудника за текущий месяц — текст для бота. */
+async function salaryMessage(
+  admin: Admin,
+  projectId: string,
+  userId: string,
+  role: string | null,
+): Promise<string> {
+  const period = currentPeriod();
+  const bounds = periodBounds(period);
+  const fromTs = `${bounds.from}T00:00:00+05:00`;
+  const toTs = `${bounds.toExclusive}T00:00:00+05:00`;
+
+  const { data: pr } = await admin
+    .from("payroll")
+    .select("base_salary, days_planned, days_worked, kpi_bonus, bonus, deduction, status")
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .eq("period", period)
+    .maybeSingle();
+
+  const lines: string[] = [`💵 <b>Зарплата · ${periodLabel(period)}</b>`, ""];
+
+  if (pr) {
+    const base = accruedBase(Number(pr.base_salary), pr.days_planned, pr.days_worked);
+    const total = payrollTotal({
+      base_salary: Number(pr.base_salary),
+      days_planned: pr.days_planned,
+      days_worked: pr.days_worked,
+      kpi_bonus: Number(pr.kpi_bonus),
+      bonus: Number(pr.bonus),
+      deduction: Number(pr.deduction),
+    });
+    const status = PAYROLL_STATUS[pr.status] ?? PAYROLL_STATUS.draft;
+    lines.push(`Оклад по дням (${pr.days_worked} из ${pr.days_planned}): ${money(base)}`);
+    lines.push(`KPI / премия: ${money(pr.kpi_bonus)}`);
+    lines.push(`Бонус: ${money(pr.bonus)}`);
+    if (Number(pr.deduction) > 0) lines.push(`Удержания: − ${money(pr.deduction)}`);
+    lines.push("───────────────");
+    lines.push(`<b>К выплате: ${money(total)}</b>`);
+    lines.push(`Статус: ${status.label}`);
+  } else {
+    lines.push("За этот месяц зарплата ещё не рассчитана.");
+  }
+
+  // Активность за месяц (для мотивации)
+  if (role && SELL_ROLES.includes(role) && role !== "hunter") {
+    const { data: sales } = await admin
+      .from("sales")
+      .select("amount")
+      .eq("project_id", projectId)
+      .eq("manager_id", userId)
+      .gte("created_at", fromTs)
+      .lt("created_at", toTs);
+    const cnt = sales?.length ?? 0;
+    const sum = (sales ?? []).reduce((s, x) => s + Number(x.amount), 0);
+    lines.push("", `📊 Продаж в этом месяце: <b>${cnt}</b> на ${money(sum)}`);
+  } else if (role === "hunter") {
+    const { data: accepted } = await admin
+      .from("leads")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("assigned_to", userId)
+      .not("accepted_at", "is", null)
+      .gte("accepted_at", fromTs)
+      .lt("accepted_at", toTs);
+    lines.push("", `📊 Принято лидов в этом месяце: <b>${accepted?.length ?? 0}</b>`);
+  }
+
+  return lines.join("\n");
 }
 
 async function closeShift(admin: Admin, projectId: string, userId: string) {
@@ -384,6 +465,15 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
   const link = await findLink(admin, chatId);
   if (!link) {
     await sendMessage(chatId, "Аккаунт не привязан. Откройте ссылку привязки из Pulse.");
+    return;
+  }
+
+  // «Моя зарплата» — доступно всем, даже посреди оформления продажи
+  if (text === "💵 Моя зарплата") {
+    const role = await effectiveRole(admin, link.project_id, link.user_id);
+    await sendMessage(chatId, await salaryMessage(admin, link.project_id, link.user_id, role), {
+      replyMarkup: keyboardForRole(role),
+    });
     return;
   }
 
