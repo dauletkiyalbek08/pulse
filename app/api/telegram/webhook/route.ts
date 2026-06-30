@@ -573,7 +573,7 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
   // Поток оформления продажи (менеджер) — обрабатываем до хантерских кнопок
   if (await handleManagerSale(admin, msg, link)) return;
 
-  // Геолокация — начать смену с подтверждением офиса
+  // Геолокация (нажата кнопка «🟢 Начать смену») — старт смены с проверкой офиса
   if (msg.location) {
     const res = await startShift(
       admin,
@@ -590,7 +590,8 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     } else if (res.already) {
       await sendMessage(chatId, "Вы уже на смене ✅");
     } else {
-      await sendMessage(chatId, "✅ Смена начата (вы в офисе). Лиды будут приходить по очереди.");
+      const where = res.distance != null ? ` (в офисе, ${Math.round(res.distance)} м)` : "";
+      await sendMessage(chatId, `✅ Смена начата${where}. Лиды будут приходить по очереди.`);
     }
     return;
   }
@@ -608,7 +609,7 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     if (officeSet) {
       await sendMessage(
         chatId,
-        "📍 Чтобы начать смену, подтвердите, что вы в офисе — нажмите «📍 Я в офисе (геолокация)» и отправьте локацию.",
+        "📍 Нажмите кнопку «🟢 Начать смену» — Telegram попросит отправить геолокацию, и мы подтвердим, что вы в офисе.",
         { replyMarkup: shiftKeyboard() },
       );
       return;
@@ -654,7 +655,7 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
   } else {
     await sendMessage(
       chatId,
-      "Кнопки: «🟢 Начать смену», «📍 Я в офисе (геолокация)» для подтверждения офиса и «🔚 Ушёл».",
+      "Кнопки: «🟢 Начать смену» (отправит геолокацию и подтвердит офис) и «🔚 Ушёл».",
       { replyMarkup: shiftKeyboard() },
     );
   }

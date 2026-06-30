@@ -116,7 +116,13 @@ export function DateRangePicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-2 flex w-[420px] max-w-[90vw] flex-col gap-0 overflow-hidden rounded-card border border-line bg-surface shadow-card sm:flex-row">
+        <>
+        {/* Затемнение на телефоне: попап читается и закрывается тапом мимо */}
+        <div
+          className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+          onClick={() => setOpen(false)}
+        />
+        <div className="fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[92vw] max-w-[420px] -translate-x-1/2 -translate-y-1/2 flex-col gap-0 overflow-y-auto rounded-card border border-line bg-surface shadow-card sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:max-h-none sm:w-[420px] sm:-translate-x-0 sm:-translate-y-0 sm:flex-row sm:overflow-hidden">
           {/* Пресеты */}
           <ul className="max-h-[320px] overflow-y-auto border-b border-line p-2 sm:w-[160px] sm:border-b-0 sm:border-r">
             {RANGE_PRESETS.map((p) => (
@@ -211,6 +217,7 @@ export function DateRangePicker({
             </div>
           </div>
         </div>
+        </>
       )}
     </div>
   );
