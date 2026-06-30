@@ -30,6 +30,14 @@ export function LogoMark({ className = "h-9 w-9" }: { className?: string }) {
   );
 }
 
+/** Горизонтальный логотип-вордмарк (кардиограмма + «PULSE»), фирменный зелёный. */
+export function LogoWord({ className = "h-7" }: { className?: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/logo.png" alt="Pulse" className={`w-auto select-none ${className}`} draggable={false} />
+  );
+}
+
 export function Logo({
   size = "md",
   markOnly = false,
@@ -37,16 +45,14 @@ export function Logo({
   size?: "sm" | "md" | "lg";
   markOnly?: boolean;
 }) {
-  const mark = size === "lg" ? "h-12 w-12" : size === "sm" ? "h-8 w-8" : "h-9 w-9";
-  const text = size === "lg" ? "text-2xl" : "text-lg";
-  return (
-    <div className="flex items-center gap-2.5">
+  if (markOnly) {
+    const mark = size === "lg" ? "h-12 w-12" : size === "sm" ? "h-8 w-8" : "h-9 w-9";
+    return (
       <span className={`inline-block overflow-hidden rounded-[28%] shadow-soft ${mark}`}>
         <LogoMark className={mark} />
       </span>
-      {!markOnly && (
-        <span className={`${text} font-bold tracking-tight text-ink`}>Pulse</span>
-      )}
-    </div>
-  );
+    );
+  }
+  const h = size === "lg" ? "h-11" : size === "sm" ? "h-6" : "h-7";
+  return <LogoWord className={h} />;
 }
