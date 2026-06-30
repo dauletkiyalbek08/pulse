@@ -9,6 +9,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { NewLeadForm } from "@/components/new-lead-form";
 import { LeadsTable, type LeadRow } from "@/components/leads-table";
 import { ExportButton } from "@/components/export-button";
+import { DistributeLeadsButton } from "@/components/distribute-leads-button";
 
 const SOURCE_LABEL: Record<string, string> = {
   meta: "Meta",
@@ -90,6 +91,19 @@ export default async function LeadsPage({
   // Кто может отмечать покупку (и запускать CAPI): продажи ведут менеджеры/руководство.
   const canSell = ["owner", "director", "head_sales", "manager"].includes(role ?? "");
 
+  // РОП/директор может вручную раздать «зависшие» лиды без хантера.
+  const canDistribute = ["owner", "director", "head_sales"].includes(role ?? "");
+  let unassignedCount = 0;
+  if (canDistribute) {
+    const { count } = await supabase
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .is("assigned_to", null)
+      .not("status", "in", "(lost,sale,paid)");
+    unassignedCount = count ?? 0;
+  }
+
   // Данные для экспорта в CSV (по текущему периоду; хантер — только свои).
   const exportHeaders = [
     "Дата",
@@ -116,6 +130,9 @@ export default async function LeadsPage({
     <div className="mx-auto max-w-6xl px-6 py-8">
       <PageHeader title="Лиды" subtitle={`Период: ${range.label}`}>
         <div className="flex flex-wrap items-center gap-2">
+          {canDistribute && (
+            <DistributeLeadsButton projectId={projectId} count={unassignedCount} />
+          )}
           <ExportButton
             filename={`leads-${range.from}_${range.to}`}
             headers={exportHeaders}

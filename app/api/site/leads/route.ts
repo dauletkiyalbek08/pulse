@@ -80,9 +80,10 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (!inserted) return NextResponse.json({ ok: true });
 
-  // Раздача хантеру (round-robin): на смене → любому активному + уведомление в Telegram
+  // Раздача хантеру на смене (round-robin) + уведомление в Telegram.
+  // Если на смене никого — лид остаётся «Новый», РОП раздаст вручную.
   try {
-    const hunter = await pickNextHunter(admin, project.id, undefined, { fallbackToAll: true });
+    const hunter = await pickNextHunter(admin, project.id);
     if (hunter) await assignLead(admin, project.id, inserted.id, hunter);
   } catch {
     // раздача не критична для приёма заявки

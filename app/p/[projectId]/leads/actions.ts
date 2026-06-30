@@ -3,8 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getEffectiveRole } from "@/lib/queries";
 import { pickNextHunter } from "@/lib/distribution";
-import { notifyHunter } from "@/lib/lead-dispatch";
+import { notifyHunter, assignLead } from "@/lib/lead-dispatch";
+
+const DISTRIBUTE_ROLES = ["owner", "director", "head_sales"];
 
 export interface NewLeadState {
   error: string | null;
@@ -30,8 +34,8 @@ export async function createLead(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Равная раздача: лид падает хантеру на смене; если никого нет — любому активному
-  const assignedTo = await pickNextHunter(supabase, projectId, undefined, { fallbackToAll: true });
+  // Равная раздача: лид падает хантеру НА СМЕНЕ (если никого нет — остаётся «Новый», раздаст РОП)
+  const assignedTo = await pickNextHunter(supabase, projectId);
 
   const { data: lead, error } = await supabase
     .from("leads")
@@ -64,4 +68,50 @@ export async function createLead(
 
   revalidatePath(`/p/${projectId}/leads`);
   return { error: null, ok: true };
+}
+
+/**
+ * РОП/директор раздаёт «зависшие» лиды (без ответственного) хантерам по кругу.
+ * Нужно, когда лиды пришли в часы, где никто не был на смене, и остались «Новый».
+ * Раздаём поровну между ВСЕМИ активными хантерами (на смене или нет).
+ */
+export async function distributeUnassignedLeads(
+  projectId: string,
+): Promise<{ ok: boolean; assigned: number; error?: string }> {
+  const role = await getEffectiveRole(projectId);
+  if (!DISTRIBUTE_ROLES.includes(role ?? "")) {
+    return { ok: false, assigned: 0, error: "Недостаточно прав" };
+  }
+
+  const admin = createAdminClient();
+
+  const { data: hunters } = await admin
+    .from("project_members")
+    .select("user_id")
+    .eq("project_id", projectId)
+    .eq("role", "hunter")
+    .eq("status", "active");
+  const hunterIds = (hunters ?? []).map((h) => h.user_id).sort();
+  if (hunterIds.length === 0) {
+    return { ok: false, assigned: 0, error: "В проекте нет активных хантеров" };
+  }
+
+  const { data: leads } = await admin
+    .from("leads")
+    .select("id")
+    .eq("project_id", projectId)
+    .is("assigned_to", null)
+    .not("status", "in", "(lost,sale,paid)")
+    .order("created_at", { ascending: true });
+  if (!leads || leads.length === 0) return { ok: true, assigned: 0 };
+
+  let i = 0;
+  for (const lead of leads) {
+    const hunter = hunterIds[i % hunterIds.length];
+    await assignLead(admin, projectId, lead.id, hunter); // обновляет + шлёт в Telegram
+    i++;
+  }
+
+  revalidatePath(`/p/${projectId}/leads`);
+  return { ok: true, assigned: leads.length };
 }
