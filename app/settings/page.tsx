@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Sparkles, Send } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatNumber } from "@/lib/format";
 import { PlatformAiSettings } from "@/components/platform-ai-settings";
-import { getPlatformAiSettings, getPlatformUsage } from "./actions";
+import { TelegramWebhookSettings } from "@/components/telegram-webhook-settings";
+import { getPlatformAiSettings, getPlatformUsage, getTelegramStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,11 @@ export default async function PlatformSettingsPage() {
     .maybeSingle();
   if (profile?.global_role !== "owner") redirect("/");
 
-  const [settings, usage] = await Promise.all([getPlatformAiSettings(), getPlatformUsage()]);
+  const [settings, usage, tgStatus] = await Promise.all([
+    getPlatformAiSettings(),
+    getPlatformUsage(),
+    getTelegramStatus(),
+  ]);
   const totalUsd = usage.reduce((s, u) => s + u.estUsd, 0);
   const monthName = new Date().toLocaleString("ru-RU", { month: "long", year: "numeric" });
 
@@ -57,6 +62,17 @@ export default async function PlatformSettingsPage() {
             <h2 className="text-base font-semibold text-ink">Ключи ИИ (анализ звонков)</h2>
           </div>
           <PlatformAiSettings settings={settings} />
+        </section>
+
+        <section className="mt-10">
+          <div className="mb-3 flex items-center gap-2">
+            <Send className="h-4 w-4 text-brand" />
+            <h2 className="text-base font-semibold text-ink">Telegram-бот</h2>
+          </div>
+          <p className="mb-3 text-sm text-muted">
+            Один бот на все проекты. Сменил бота — обнови токен в Vercel и нажми «Переустановить вебхук».
+          </p>
+          <TelegramWebhookSettings status={tgStatus} />
         </section>
 
         <section className="mt-10">

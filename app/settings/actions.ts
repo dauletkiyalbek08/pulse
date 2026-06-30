@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -134,6 +135,74 @@ export async function disconnectPlatformOpenai(): Promise<{ ok: boolean }> {
   await admin.from("platform_config").update({ openai_key_enc: null }).eq("id", 1);
   revalidatePath("/settings");
   return { ok: true };
+}
+
+/* ──────────────────────────── Telegram-бот ──────────────────────────── */
+
+const TG_API = (token: string, method: string) => `https://api.telegram.org/bot${token}/${method}`;
+
+export interface TelegramStatus {
+  configured: boolean; // есть ли TELEGRAM_BOT_TOKEN в окружении
+  username: string | null; // @username бота
+  webhookSet: boolean;
+  webhookUrl: string | null;
+}
+
+/** Текущий бот и состояние вебхука (по env-токену). */
+export async function getTelegramStatus(): Promise<TelegramStatus> {
+  const empty: TelegramStatus = { configured: false, username: null, webhookSet: false, webhookUrl: null };
+  if (!(await requireOwner())) return empty;
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return empty;
+  try {
+    const [me, wh] = await Promise.all([
+      fetch(TG_API(token, "getMe"), { cache: "no-store" }).then((r) => r.json()),
+      fetch(TG_API(token, "getWebhookInfo"), { cache: "no-store" }).then((r) => r.json()),
+    ]);
+    const username = me?.result?.username ? `@${me.result.username}` : null;
+    const webhookUrl = (wh?.result?.url as string) || null;
+    return { configured: true, username, webhookSet: !!webhookUrl, webhookUrl };
+  } catch {
+    return { configured: true, username: null, webhookSet: false, webhookUrl: null };
+  }
+}
+
+/** Поставить/переустановить вебхук Telegram на текущий домен (для бота из env). */
+export async function setupTelegramWebhook(): Promise<{ ok: boolean; error?: string; url?: string }> {
+  if (!(await requireOwner())) return { ok: false, error: "Недостаточно прав" };
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!token)
+    return {
+      ok: false,
+      error: "В Vercel нет TELEGRAM_BOT_TOKEN. Добавьте токен нового бота и сделайте Redeploy.",
+    };
+  if (!secret) return { ok: false, error: "В Vercel нет TELEGRAM_WEBHOOK_SECRET." };
+
+  const host = (await headers()).get("host");
+  if (!host || host.includes("localhost")) {
+    return { ok: false, error: "Откройте страницу на рабочем домене (не localhost)." };
+  }
+  const url = `https://${host}/api/telegram/webhook`;
+
+  try {
+    const res = await fetch(TG_API(token, "setWebhook"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        secret_token: secret,
+        allowed_updates: ["message", "callback_query"],
+        drop_pending_updates: true,
+      }),
+      cache: "no-store",
+    }).then((r) => r.json());
+    if (!res?.ok) return { ok: false, error: res?.description || "Telegram отклонил запрос" };
+    revalidatePath("/settings");
+    return { ok: true, url };
+  } catch {
+    return { ok: false, error: "Не удалось связаться с Telegram" };
+  }
 }
 
 export interface ProjectUsage {
