@@ -1,11 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getProject, getEffectiveRole } from "@/lib/queries";
 import { getNiche, nicheDisplayLabel } from "@/lib/niches";
 import { getMenu, filterMenuByModules } from "@/lib/menu";
 import { filterMenuByRole } from "@/lib/access";
 import { Sidebar } from "@/components/sidebar";
 import { ProjectTopbar } from "@/components/project-topbar";
+import { TelegramSelfConnect } from "@/components/telegram-self-connect";
 
 export default async function ProjectLayout({
   children,
@@ -39,6 +41,25 @@ export default async function ProjectLayout({
   const enabledMenu = filterMenuByModules(getMenu(niche.key), project.modules);
   const sections = filterMenuByRole(enabledMenu, role);
 
+  // Самоподключение Telegram: показываем сотруднику-участнику, ещё не привязавшему бота.
+  const admin = createAdminClient();
+  const [{ data: membership }, { data: tgLink }] = await Promise.all([
+    admin
+      .from("project_members")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    admin
+      .from("telegram_links")
+      .select("user_id")
+      .eq("project_id", projectId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
+  const showTgConnect = !!membership && !tgLink;
+
   return (
     <div className="min-h-screen">
       <Sidebar
@@ -62,6 +83,7 @@ export default async function ProjectLayout({
             role: role ?? "director",
           }}
         />
+        {showTgConnect && <TelegramSelfConnect projectId={project.id} />}
         <main className="flex-1">{children}</main>
       </div>
     </div>

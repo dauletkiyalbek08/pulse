@@ -91,6 +91,25 @@ export async function genTelegramLink(
   return { ok: true, url: `https://t.me/${username}?start=${code}` };
 }
 
+/** Самоподключение: текущий сотрудник создаёт ссылку привязки для СЕБЯ. */
+export async function connectMyTelegram(projectId: string): Promise<TelegramLinkResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Нет авторизации" };
+
+  // gen_telegram_code разрешает v_caller = p_user_id (привязка самому себе).
+  const { data: code, error } = await supabase.rpc("gen_telegram_code", {
+    p_project_id: projectId,
+    p_user_id: user.id,
+  });
+  if (error || !code) return { ok: false, error: "Не удалось создать ссылку" };
+
+  const username = process.env.TELEGRAM_BOT_USERNAME ?? "";
+  return { ok: true, url: `https://t.me/${username}?start=${code}` };
+}
+
 export async function fireEmployee(
   projectId: string,
   formData: FormData,
