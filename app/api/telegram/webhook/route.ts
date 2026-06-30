@@ -167,6 +167,90 @@ async function salaryMessage(
   return lines.join("\n");
 }
 
+/** Личная статистика сотрудника + место в рейтинге команды за текущий месяц. */
+async function statsMessage(
+  admin: Admin,
+  projectId: string,
+  userId: string,
+  role: string | null,
+): Promise<string> {
+  const period = currentPeriod();
+  const b = periodBounds(period);
+  const fromTs = `${b.from}T00:00:00+05:00`;
+  const toTs = `${b.toExclusive}T00:00:00+05:00`;
+  const head = `📊 <b>Моя статистика · ${periodLabel(period)}</b>`;
+
+  const { data: members } = await admin
+    .from("project_members")
+    .select("user_id, role")
+    .eq("project_id", projectId)
+    .eq("status", "active");
+  const ids = (members ?? []).map((m) => m.user_id);
+  const { data: profiles } = ids.length
+    ? await admin.from("profiles").select("id, full_name").in("id", ids)
+    : { data: [] as { id: string; full_name: string }[] };
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+
+  // Хантер — рейтинг по принятым лидам
+  if (role === "hunter") {
+    const { data: leads } = await admin
+      .from("leads")
+      .select("assigned_to")
+      .eq("project_id", projectId)
+      .not("accepted_at", "is", null)
+      .gte("accepted_at", fromTs)
+      .lt("accepted_at", toTs);
+    const cnt = new Map<string, number>();
+    for (const l of leads ?? []) if (l.assigned_to) cnt.set(l.assigned_to, (cnt.get(l.assigned_to) ?? 0) + 1);
+    const hunterIds = new Set<string>((members ?? []).filter((m) => m.role === "hunter").map((m) => m.user_id));
+    hunterIds.add(userId);
+    const ranked = [...hunterIds].map((id) => ({ id, n: cnt.get(id) ?? 0 })).sort((a, b) => b.n - a.n);
+    const place = ranked.findIndex((r) => r.id === userId) + 1;
+    const lines = [head, "", `Принято лидов: <b>${cnt.get(userId) ?? 0}</b>`];
+    if (ranked.length > 1) lines.push(`🏆 Место: <b>#${place}</b> из ${ranked.length} хантеров`);
+    lines.push("", "<b>Топ хантеров:</b>");
+    ranked.slice(0, 3).forEach((r, i) => lines.push(`${i + 1}. ${nameById.get(r.id) ?? "—"} — ${r.n}`));
+    return lines.join("\n");
+  }
+
+  // Продавцы — рейтинг по сумме продаж
+  if (role && SELL_ROLES.includes(role)) {
+    const { data: sales } = await admin
+      .from("sales")
+      .select("manager_id, amount")
+      .eq("project_id", projectId)
+      .gte("created_at", fromTs)
+      .lt("created_at", toTs);
+    const agg = new Map<string, { n: number; sum: number }>();
+    for (const s of sales ?? []) {
+      if (!s.manager_id) continue;
+      const cur = agg.get(s.manager_id) ?? { n: 0, sum: 0 };
+      cur.n += 1;
+      cur.sum += Number(s.amount);
+      agg.set(s.manager_id, cur);
+    }
+    const sellerIds = new Set<string>();
+    (members ?? []).filter((m) => SELL_ROLES.includes(m.role)).forEach((m) => sellerIds.add(m.user_id));
+    agg.forEach((_, id) => sellerIds.add(id));
+    sellerIds.add(userId);
+    const ranked = [...sellerIds]
+      .map((id) => ({ id, ...(agg.get(id) ?? { n: 0, sum: 0 }) }))
+      .sort((a, b) => b.sum - a.sum);
+    const mine = agg.get(userId) ?? { n: 0, sum: 0 };
+    const place = ranked.findIndex((r) => r.id === userId) + 1;
+    const lines = [head, "", `Продаж: <b>${mine.n}</b> на ${money(mine.sum)}`];
+    if (mine.n > 0) lines.push(`Средний чек: ${money(Math.round(mine.sum / mine.n))}`);
+    if (ranked.length > 1) lines.push(`🏆 Место по продажам: <b>#${place}</b> из ${ranked.length}`);
+    lines.push("", "<b>Топ продавцов:</b>");
+    ranked.slice(0, 3).forEach((r, i) =>
+      lines.push(`${i + 1}. ${nameById.get(r.id) ?? "—"} — ${money(r.sum)} (${r.n})`),
+    );
+    return lines.join("\n");
+  }
+
+  return `${head}\n\nРейтинг доступен продавцам и хантерам.`;
+}
+
 async function closeShift(admin: Admin, projectId: string, userId: string) {
   await admin
     .from("shifts")
@@ -472,6 +556,15 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
   if (text === "💵 Моя зарплата") {
     const role = await effectiveRole(admin, link.project_id, link.user_id);
     await sendMessage(chatId, await salaryMessage(admin, link.project_id, link.user_id, role), {
+      replyMarkup: keyboardForRole(role),
+    });
+    return;
+  }
+
+  // «Моя статистика» — личные цифры + место в рейтинге команды
+  if (text === "📊 Моя статистика") {
+    const role = await effectiveRole(admin, link.project_id, link.user_id);
+    await sendMessage(chatId, await statsMessage(admin, link.project_id, link.user_id, role), {
       replyMarkup: keyboardForRole(role),
     });
     return;

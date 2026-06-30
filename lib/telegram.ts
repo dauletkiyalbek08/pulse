@@ -70,7 +70,8 @@ export function shiftKeyboard() {
     keyboard: [
       [{ text: "🟢 Начать смену" }],
       [{ text: "📍 Я в офисе (геолокация)", request_location: true }],
-      [{ text: "💵 Моя зарплата" }, { text: "🔚 Ушёл" }],
+      [{ text: "💵 Моя зарплата" }, { text: "📊 Моя статистика" }],
+      [{ text: "🔚 Ушёл" }],
     ],
     resize_keyboard: true,
   };
@@ -81,7 +82,7 @@ export function saleKeyboard() {
   return {
     keyboard: [
       [{ text: "💰 Оформить продажу" }],
-      [{ text: "💵 Моя зарплата" }],
+      [{ text: "💵 Моя зарплата" }, { text: "📊 Моя статистика" }],
     ],
     resize_keyboard: true,
   };
