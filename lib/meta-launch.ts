@@ -72,6 +72,26 @@ export interface VideoState {
   thumbUrl: string | null;
 }
 
+/**
+ * Instagram-аккаунт, связанный со Страницей (для identity объявления —
+ * показ в Instagram и Threads от этого профиля). null → только Facebook.
+ */
+export async function fetchPageInstagram(token: string, pageId: string): Promise<string | null> {
+  const url =
+    `${GRAPH}/${pageId}?fields=instagram_business_account,connected_instagram_account` +
+    `&access_token=${encodeURIComponent(token)}`;
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    const json = (await res.json()) as {
+      instagram_business_account?: { id: string };
+      connected_instagram_account?: { id: string };
+    };
+    return json.instagram_business_account?.id ?? json.connected_instagram_account?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Статус обработки видео + превью (thumbnail) для креатива. */
 export async function videoState(token: string, videoId: string): Promise<VideoState> {
   const sres = await fetch(
@@ -132,6 +152,7 @@ export interface LaunchParams {
   pixelId: string | null; // нужен для оптимизации под заявки (leads)
   advantageAudience: 0 | 1; // Advantage-аудитория: 1 — расширять, 0 — строго
   geoLocations: Record<string, unknown>; // { countries:[...] } или { cities:[...] }
+  instagramUserId: string | null; // identity IG/Threads; null → только Facebook
 }
 
 /**
@@ -183,13 +204,17 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
   });
 
   // 2. Группа объявлений: бюджет + аудитория + цель оптимизации.
-  // Площадки: только Facebook, Instagram, Threads; только мобильные.
+  // Площадки только мобильные. Instagram/Threads — лишь при наличии IG-профиля;
+  // без него оставляем только Facebook (объявление от Страницы).
+  const publisherPlatforms = p.instagramUserId
+    ? ["facebook", "instagram", "threads"]
+    : ["facebook"];
   const targeting: Record<string, unknown> = {
     geo_locations: p.geoLocations,
     age_min: p.ageMin,
     age_max: p.ageMax,
     device_platforms: ["mobile"],
-    publisher_platforms: ["facebook", "instagram", "threads"],
+    publisher_platforms: publisherPlatforms,
     targeting_automation: { advantage_audience: p.advantageAudience },
   };
   const genders = GENDER_CODE[p.gender];
@@ -223,9 +248,13 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
   };
   if (p.thumbUrl) videoData.image_url = p.thumbUrl;
 
+  const objectStorySpec: Record<string, unknown> = { page_id: p.pageId, video_data: videoData };
+  // Identity: показ в Instagram и Threads от связанного IG-профиля.
+  if (p.instagramUserId) objectStorySpec.instagram_user_id = p.instagramUserId;
+
   const creative = await graphPost<{ id: string }>(`act_${acc}/adcreatives`, p.token, {
     name: `${base} · креатив`,
-    object_story_spec: { page_id: p.pageId, video_data: videoData },
+    object_story_spec: objectStorySpec,
     // Отказ от авто-«расширений браузера» (Позвонить/Messenger/WhatsApp/Форма) —
     // Meta включает их сама, если не поставить OPT_OUT. Нам нужен только сайт.
     degrees_of_freedom_spec: {
@@ -394,6 +423,9 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
   const dailyBudgetMinor = Math.max(100, Math.round(budgetUsd * 100)); // минимум $1
   const country = cfg?.country ?? "KZ";
 
+  // IG-профиль страницы (для показа в Instagram и Threads). Нет — только Facebook.
+  const instagramUserId = await fetchPageInstagram(token, pageId);
+
   // Гео: конкретный город (если выбран и нашёлся ключ) или вся страна
   let geoLocations: Record<string, unknown> = { countries: [country] };
   if (draft.geo_city) {
@@ -425,6 +457,7 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
       pixelId: landing?.pixel_id ?? null,
       advantageAudience: draft.advantage ? 1 : 0,
       geoLocations,
+      instagramUserId,
     });
 
     await admin
