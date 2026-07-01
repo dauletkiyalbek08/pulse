@@ -136,6 +136,7 @@ export type Database = {
           ad_id: string | null
           status: string
           error: string | null
+          awaiting_text: boolean
           created_at: string
           updated_at: string
         }
@@ -157,6 +158,7 @@ export type Database = {
           ad_id?: string | null
           status?: string
           error?: string | null
+          awaiting_text?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -178,6 +180,7 @@ export type Database = {
           ad_id?: string | null
           status?: string
           error?: string | null
+          awaiting_text?: boolean
           created_at?: string
           updated_at?: string
         }

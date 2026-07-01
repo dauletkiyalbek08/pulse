@@ -59,9 +59,10 @@ export function launchDraftButtons(id: string): InlineButton[][] {
   return [
     [{ text: "🚀 Запустить", callback_data: `alaunch:${id}` }],
     [
-      { text: "✏️ Переписать текст", callback_data: `arewrite:${id}` },
-      { text: "❌ Отмена", callback_data: `acancel:${id}` },
+      { text: "🤖 AI-текст заново", callback_data: `arewrite:${id}` },
+      { text: "✍️ Свой текст", callback_data: `atext:${id}` },
     ],
+    [{ text: "❌ Отмена", callback_data: `acancel:${id}` }],
   ];
 }
 

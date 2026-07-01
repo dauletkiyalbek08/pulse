@@ -150,12 +150,14 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
   const base = `${p.namePrefix} · ${stamp}`;
   const leadMode = p.objective === "leads" && !!p.pixelId;
 
-  // 1. Кампания (ODAX): лиды или трафик
+  // 1. Кампания (ODAX): лиды или трафик. Бюджет держим на группе (не CBO),
+  // поэтому Meta требует явно указать is_adset_budget_sharing_enabled.
   const campaign = await graphPost<{ id: string }>(`act_${acc}/campaigns`, p.token, {
     name: `${base} · кампания`,
     objective: leadMode ? "OUTCOME_LEADS" : "OUTCOME_TRAFFIC",
     status: "PAUSED",
     special_ad_categories: [],
+    is_adset_budget_sharing_enabled: false,
   });
 
   // 2. Группа объявлений: бюджет + аудитория + цель оптимизации
@@ -229,22 +231,25 @@ export interface AdCopy {
  */
 export async function generateAdCopy(projectId: string, offer: string): Promise<AdCopy> {
   const fallback: AdCopy = {
-    headline: "Тегін диагностика",
+    headline: "Ағылшын тілі курсы",
     primaryText:
-      (offer.trim() || "Ағылшын тілін нөлден үйреніңіз.") +
-      "\n\nТегін диагностикадан өтіп, деңгейіңізді біліңіз 👇",
+      (offer.trim() || "Ағылшын тілін нөлден сөйлеуге дейін үйреніңіз.") +
+      "\n\nОрын саны шектеулі. Тіркелу үшін өтінім қалдырыңыз 👇",
   };
 
   const ai = await resolveCallAi(projectId);
   if (!ai.deepseekKey) return fallback;
 
   const prompt =
-    "Напиши текст для рекламного объявления в Instagram/Facebook, которое ведёт на квиз-диагностику " +
-    "по онлайн-курсу английского языка. Целевая аудитория — казахстанцы, пиши на КАЗАХСКОМ языке. " +
-    `Оффер от заказчика: «${offer.trim() || "курс английского языка"}».\n\n` +
+    "Напиши текст для рекламного объявления в Instagram/Facebook для ОНЛАЙН-КУРСА английского языка. " +
+    "Цель — чтобы человек оставил заявку (записался на курс). Реклама ведёт на короткую анкету-квиз. " +
+    "ВАЖНО: это НЕ тест на определение уровня английского — это реклама самого курса. НЕ пиши про " +
+    "«определи свой уровень» или «диагностика уровня». Пиши про пользу курса и призыв записаться. " +
+    "Целевая аудитория — казахстанцы, пиши на КАЗАХСКОМ языке.\n" +
+    `Оффер/детали от заказчика (используй как основу): «${offer.trim() || "курс английского языка"}».\n\n` +
     "Формат ответа СТРОГО такой (без пояснений):\n" +
     "HEADLINE: <короткий заголовок до 35 символов>\n" +
-    "TEXT: <основной текст 2-4 коротких предложения с эмодзи и призывом пройти бесплатную диагностику>";
+    "TEXT: <основной текст 2-4 коротких предложения с эмодзи и призывом оставить заявку / записаться>";
 
   try {
     const raw = await generateText(ai.deepseekKey, ai.deepseekModel, prompt, 0.8);

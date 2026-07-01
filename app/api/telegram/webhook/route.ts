@@ -337,6 +337,39 @@ function draftCardText(copy: AdCopy, budget: number, audience: string, destinati
 
 const GENDER_RU: Record<string, string> = { all: "все", male: "мужчины", female: "женщины" };
 
+/** Метки кнопок обычного меню — их не принимаем как «свой текст объявления». */
+const MENU_LABELS = new Set([
+  "🟢 Начать смену",
+  "🔚 Ушёл",
+  "💵 Моя зарплата",
+  "📊 Моя статистика",
+  "💰 Оформить продажу",
+  "❌ Отмена",
+  "📊 Отчёты",
+]);
+
+/** Собрать и отправить (или обновить) карточку черновика рекламы. */
+async function sendDraftCard(
+  admin: Admin,
+  chatId: number,
+  projectId: string,
+  id: string,
+  copy: AdCopy,
+  editMessageId?: number,
+): Promise<void> {
+  const { data: cfg } = await admin
+    .from("ad_launch_config")
+    .select("country, age_min, age_max, gender, daily_budget_usd, destination_url")
+    .eq("project_id", projectId)
+    .maybeSingle();
+  const budget = Number(cfg?.daily_budget_usd ?? 5);
+  const audience = `${cfg?.country ?? "KZ"}, ${cfg?.age_min ?? 24}–${cfg?.age_max ?? 55} лет, ${GENDER_RU[cfg?.gender ?? "all"]}`;
+  const destination = cfg?.destination_url ?? "квиз проекта";
+  const text = draftCardText(copy, budget, audience, destination);
+  if (editMessageId) await editMessageText(chatId, editMessageId, text, launchDraftButtons(id));
+  else await sendMessage(chatId, text, { buttons: launchDraftButtons(id) });
+}
+
 /**
  * Приём видео-креатива: грузим в Meta, генерим текст от AI, сохраняем черновик
  * и показываем карточку с кнопкой «Запустить». Ничего не тратится до подтверждения.
@@ -488,24 +521,24 @@ async function handleLaunchCallback(admin: Admin, cb: TgCallback): Promise<void>
     return;
   }
 
+  if (action === "atext") {
+    await admin.from("ad_launches").update({ awaiting_text: true }).eq("id", id);
+    await answerCallback(cb.id, "Жду ваш текст");
+    await sendMessage(
+      chatId,
+      "✍️ Пришлите свой текст объявления одним сообщением (можно с эмодзи). Он заменит текст в черновике.",
+    );
+    return;
+  }
+
   if (action === "arewrite") {
     await answerCallback(cb.id, "Переписываю текст…");
     const copy = await generateAdCopy(proj.project_id, draft.offer ?? "");
     await admin
       .from("ad_launches")
-      .update({ primary_text: copy.primaryText, headline: copy.headline, updated_at: new Date().toISOString() })
+      .update({ primary_text: copy.primaryText, headline: copy.headline, awaiting_text: false, updated_at: new Date().toISOString() })
       .eq("id", id);
-    const { data: cfg } = await admin
-      .from("ad_launch_config")
-      .select("country, age_min, age_max, gender, daily_budget_usd, destination_url")
-      .eq("project_id", proj.project_id)
-      .maybeSingle();
-    const budget = Number(draft.budget_usd ?? cfg?.daily_budget_usd ?? 5);
-    const audience = `${cfg?.country ?? "KZ"}, ${cfg?.age_min ?? 24}–${cfg?.age_max ?? 55} лет, ${GENDER_RU[cfg?.gender ?? "all"]}`;
-    const destination = cfg?.destination_url ?? "квиз проекта";
-    if (messageId) {
-      await editMessageText(chatId, messageId, draftCardText(copy, budget, audience, destination), launchDraftButtons(id));
-    }
+    await sendDraftCard(admin, chatId, proj.project_id, id, copy, messageId);
     return;
   }
 
@@ -841,6 +874,32 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     return;
   }
 
+  // Свой текст объявления (после кнопки «✍️ Свой текст») — заменяем текст черновика
+  if (text && !text.startsWith("/") && !MENU_LABELS.has(text)) {
+    const { data: awaitingDraft } = await admin
+      .from("ad_launches")
+      .select("id, project_id, headline")
+      .eq("chat_id", chatId)
+      .eq("awaiting_text", true)
+      .eq("status", "draft")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (awaitingDraft) {
+      const copy: AdCopy = {
+        headline: awaitingDraft.headline ?? "Ағылшын тілі курсы",
+        primaryText: text.trim(),
+      };
+      await admin
+        .from("ad_launches")
+        .update({ primary_text: copy.primaryText, awaiting_text: false, updated_at: new Date().toISOString() })
+        .eq("id", awaitingDraft.id);
+      await sendMessage(chatId, "✅ Текст обновлён.");
+      await sendDraftCard(admin, chatId, awaitingDraft.project_id, awaitingDraft.id, copy);
+      return;
+    }
+  }
+
   // «Моя зарплата» — доступно всем, даже посреди оформления продажи
   if (text === "💵 Моя зарплата") {
     const role = await effectiveRole(admin, link.project_id, link.user_id);
@@ -1032,8 +1091,8 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
     return;
   }
 
-  // Автозапуск рекламы: запустить / переписать / отменить
-  if (action === "alaunch" || action === "arewrite" || action === "acancel") {
+  // Автозапуск рекламы: запустить / переписать / свой текст / отменить
+  if (action === "alaunch" || action === "arewrite" || action === "acancel" || action === "atext") {
     await handleLaunchCallback(admin, cb);
     return;
   }
