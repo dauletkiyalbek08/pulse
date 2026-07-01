@@ -5,16 +5,19 @@ import { getNiche } from "@/lib/niches";
 import { roleLabel } from "@/lib/members";
 import { sourceLabel } from "@/lib/leads";
 import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
-import { formatCurrency, formatCurrencyShort, formatNumber, formatPercent, formatUsd } from "@/lib/format";
+import { formatCurrency, formatCurrencyShort, formatNumber, formatPercent } from "@/lib/format";
 import { getCohortFunnel } from "@/lib/funnel";
 import { getLiveAds } from "@/lib/ads-live";
 import { getDailyAdReport } from "@/lib/ads-daily";
+import { getAudienceBreakdown } from "@/lib/ads-audience";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { MetricCard } from "@/components/metric-card";
 import { FunnelCard } from "@/components/funnel-card";
 import { ExportButton } from "@/components/export-button";
 import { ReportTable } from "@/components/report-table";
+import { RnpReport } from "@/components/rnp-report";
+import { BreakdownBars } from "@/components/breakdown-bars";
 
 const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
 const roundPct = (n: number, d: number) => (d > 0 ? `${((n / d) * 100).toFixed(1)}%` : "—");
@@ -72,8 +75,11 @@ export default async function ReportsPage({
     ]);
 
   const usdRate = Number(proj?.usd_rate ?? 500);
-  // Ежедневный отчёт по рекламе (РНП) — дневная разбивка из Meta в долларах.
-  const daily = await getDailyAdReport(projectId, range.from, range.to);
+  // Реклама: ежедневный отчёт (РНП) + разбивка аудитории — из Meta, в долларах.
+  const [daily, audience] = await Promise.all([
+    getDailyAdReport(projectId, range.from, range.to),
+    getAudienceBreakdown(projectId, range.from, range.to),
+  ]);
   const leadsArr = leads ?? [];
   const salesArr = sales ?? [];
   const trialsArr = trials ?? [];
@@ -206,72 +212,23 @@ export default async function ReportsPage({
         <MetricCard label="Средний чек" value={salesCount > 0 ? formatCurrencyShort(avgCheck) : "—"} icon={Tag} />
       </div>
 
-      {/* Ежедневный отчёт по рекламе (РНП) — для таргетолога: по дням за период */}
+      {/* Ежедневный отчёт по рекламе (РНП) — таблица/диаграмма, для таргетолога */}
       <div className="mt-6">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-ink">Ежедневный отчёт по рекламе (РНП)</h2>
-            <p className="mt-0.5 text-xs text-faint">
-              По дням из Meta · суммы в долларах ($) · CPM — цена за 1000 показов
-            </p>
-          </div>
-          <ExportButton
-            filename={`rnp-${range.from}_${range.to}`}
-            headers={["Дата", "Расход $", "Показы", "CPM $", "Клики", "CTR %", "CPC $", "Лиды", "CPL $"]}
-            rows={daily.rows.map((r) => [
-              r.date,
-              r.spendUsd.toFixed(2),
-              r.impressions,
-              r.cpm != null ? r.cpm.toFixed(2) : "",
-              r.clicks,
-              r.ctr != null ? r.ctr.toFixed(2) : "",
-              r.cpc != null ? r.cpc.toFixed(2) : "",
-              r.leads,
-              r.cpl != null ? r.cpl.toFixed(2) : "",
-            ])}
-            label="Скачать РНП"
-          />
+        <RnpReport rows={daily.rows} connected={daily.connected} from={range.from} to={range.to} />
+      </div>
+
+      {/* Аудитория рекламы: откуда и кто оставляет лиды (Meta) */}
+      <div className="mt-6">
+        <h2 className="mb-1 text-base font-semibold text-ink">Аудитория рекламы</h2>
+        <p className="mb-3 text-xs text-faint">
+          Откуда приходят лиды и кто это — по данным Meta за период
+          {audience.connected ? "" : " · подключите Meta в разделе «Реклама»"}
+        </p>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <BreakdownBars title="По городу / региону" rows={audience.byRegion} max={10} />
+          <BreakdownBars title="По возрасту" rows={audience.byAge} max={8} />
+          <BreakdownBars title="По полу" rows={audience.byGender} max={4} />
         </div>
-        <ReportTable
-          columns={[
-            { label: "Дата" },
-            { label: "Расход" },
-            { label: "Показы" },
-            { label: "CPM" },
-            { label: "Клики" },
-            { label: "CTR" },
-            { label: "CPC" },
-            { label: "Лиды" },
-            { label: "CPL" },
-          ]}
-          rows={daily.rows.map((r) => [
-            r.date.split("-").reverse().join("."),
-            formatUsd(r.spendUsd, 2),
-            formatNumber(r.impressions),
-            r.cpm != null ? formatUsd(r.cpm, 2) : "—",
-            formatNumber(r.clicks),
-            r.ctr != null ? `${r.ctr.toFixed(2)}%` : "—",
-            r.cpc != null ? formatUsd(r.cpc, 2) : "—",
-            formatNumber(r.leads),
-            r.cpl != null ? formatUsd(r.cpl, 2) : "—",
-          ])}
-          total={[
-            "Итого",
-            formatUsd(daily.totals.spendUsd, 2),
-            formatNumber(daily.totals.impressions),
-            daily.totals.cpm != null ? formatUsd(daily.totals.cpm, 2) : "—",
-            formatNumber(daily.totals.clicks),
-            daily.totals.ctr != null ? `${daily.totals.ctr.toFixed(2)}%` : "—",
-            daily.totals.cpc != null ? formatUsd(daily.totals.cpc, 2) : "—",
-            formatNumber(daily.totals.leads),
-            daily.totals.cpl != null ? formatUsd(daily.totals.cpl, 2) : "—",
-          ]}
-          empty={
-            daily.connected
-              ? "Нет показов за выбранный период."
-              : "Meta-кабинет не подключён — подключите в разделе «Реклама», и отчёт заполнится сам."
-          }
-        />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">

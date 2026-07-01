@@ -174,6 +174,71 @@ export async function fetchMetaDaily(
   return rows;
 }
 
+export interface MetaBreakdownRow {
+  campaign: string;
+  age?: string;
+  gender?: string;
+  region?: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+}
+
+/**
+ * Разбивка insights по демографии/гео за период (breakdowns).
+ * `breakdowns` — напр. "age,gender" или "region". Уровень campaign, чтобы можно
+ * было отфильтровать кампании курса по названию.
+ */
+export async function fetchMetaBreakdown(
+  adAccountId: string,
+  token: string,
+  since: string,
+  until: string,
+  breakdowns: string,
+): Promise<MetaBreakdownRow[]> {
+  const id = accountNumber(adAccountId);
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+  let url =
+    `${GRAPH}/act_${id}/insights` +
+    `?level=campaign&fields=campaign_name,spend,impressions,inline_link_clicks,actions` +
+    `&breakdowns=${encodeURIComponent(breakdowns)}&time_range=${timeRange}&limit=500` +
+    `&access_token=${encodeURIComponent(token)}`;
+
+  const rows: MetaBreakdownRow[] = [];
+  for (let page = 0; page < 50 && url; page++) {
+    const res = await fetch(url, { cache: "no-store" });
+    const json = (await res.json()) as {
+      data?: (InsightsRow & {
+        age?: string;
+        gender?: string;
+        region?: string;
+        impressions?: string;
+        inline_link_clicks?: string;
+      })[];
+      paging?: { next?: string };
+      error?: { message?: string };
+    };
+    if (!res.ok || json.error) {
+      throw new Error(json.error?.message ?? "Ошибка запроса разбивки Meta");
+    }
+    for (const r of json.data ?? []) {
+      rows.push({
+        campaign: r.campaign_name ?? "Meta кампания",
+        age: r.age,
+        gender: r.gender,
+        region: r.region,
+        spend: Number(r.spend || 0),
+        impressions: Number(r.impressions || 0),
+        clicks: Number(r.inline_link_clicks || 0),
+        leads: pickLeads(r.actions),
+      });
+    }
+    url = json.paging?.next ?? "";
+  }
+  return rows;
+}
+
 /** Эвристика цели кампании по названию: вакансии vs курс.
  * `va+c` ловит и «vac», и растянутые «vaaaac»/«vaaac» (так владелец называет вакансии). */
 export function guessObjective(campaign: string): "course" | "vacancy" {
