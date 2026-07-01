@@ -594,8 +594,13 @@ async function addCollectMedia(
     .eq("launch_id", draft.id);
   const position = count ?? 0;
 
+  const isImageDoc = !!msg.document?.mime_type?.startsWith("image/");
   const videoFileId = msg.video?.file_id ?? (msg.document?.mime_type?.startsWith("video/") ? msg.document.file_id : null);
-  const photoFileId = msg.photo?.length ? msg.photo[msg.photo.length - 1].file_id : null;
+  const photoFileId =
+    (msg.photo?.length ? msg.photo[msg.photo.length - 1].file_id : null) ??
+    (isImageDoc ? msg.document!.file_id : null);
+  const imageMime = isImageDoc ? msg.document!.mime_type ?? "image/jpeg" : "image/jpeg";
+  const imageExt = imageMime.includes("png") ? "png" : "jpg";
 
   if (videoFileId) {
     const size = msg.video?.file_size ?? msg.document?.file_size ?? 0;
@@ -625,8 +630,8 @@ async function addCollectMedia(
     try {
       const resp = await fetch(url);
       const buf = Buffer.from(await resp.arrayBuffer());
-      const path = `${link.project_id}/${Date.now()}-tg.jpg`;
-      const up = await admin.storage.from("ad-videos").upload(path, buf, { contentType: "image/jpeg" });
+      const path = `${link.project_id}/${Date.now()}-tg.${imageExt}`;
+      const up = await admin.storage.from("ad-videos").upload(path, buf, { contentType: imageMime });
       if (up.error) throw new Error("storage");
       const { data: pub } = admin.storage.from("ad-videos").getPublicUrl(path);
       await admin.from("ad_launch_media").insert({ launch_id: draft.id, kind: "image", image_url: pub.publicUrl, position });
@@ -1098,11 +1103,13 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
   const collecting = await getCollectingDraft(admin, chatId);
   if (collecting) {
     const isVideo = !!msg.video || !!msg.document?.mime_type?.startsWith("video/");
+    const isImage = !!msg.photo?.length || !!msg.document?.mime_type?.startsWith("image/");
     if (isVideo) {
       await addCollectMedia(admin, chatId, link, collecting, msg);
       return;
     }
-    if (msg.photo?.length) {
+    if (isImage) {
+      // фото могло быть чеком продажи — не перехватываем, если идёт оформление
       const { data: sale } = await admin
         .from("tg_sale_drafts")
         .select("chat_id")
