@@ -27,10 +27,14 @@ export async function createEmployee(
 ): Promise<CreateEmployeeState> {
   const fullName = String(formData.get("full_name") ?? "").trim();
   const role = String(formData.get("role") ?? "");
+  const login = String(formData.get("login") ?? "").trim();
+  const password = String(formData.get("password") ?? "").trim();
 
   if (!fullName) return { error: "Введите имя сотрудника", created: null };
   if (!VALID_ROLES.includes(role))
     return { error: "Выберите роль", created: null };
+  if (password && password.length < 6)
+    return { error: "Пароль — минимум 6 символов", created: null };
 
   const supabase = await createClient();
   const {
@@ -42,9 +46,16 @@ export async function createEmployee(
     p_project_id: projectId,
     p_full_name: fullName,
     p_role: role,
+    p_email: login || undefined,
+    p_password: password || undefined,
   });
 
   if (error || !data) {
+    const msg = error?.message ?? "";
+    if (msg.includes("email_taken"))
+      return { error: "Такой логин уже занят — придумайте другой.", created: null };
+    if (msg.includes("password_short"))
+      return { error: "Пароль — минимум 6 символов", created: null };
     return {
       error: "Не удалось создать сотрудника. Попробуйте ещё раз.",
       created: null,
