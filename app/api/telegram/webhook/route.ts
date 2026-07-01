@@ -590,6 +590,8 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
 
   const link = await findLink(admin, chatId);
   if (!link) {
+    // В группах (chat_id < 0) не отвечаем на прочие сообщения — только команда /report выше.
+    if (chatId < 0) return;
     await sendMessage(chatId, "Аккаунт не привязан. Откройте ссылку привязки из Pulse.");
     return;
   }
