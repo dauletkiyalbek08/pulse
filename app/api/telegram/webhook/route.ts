@@ -288,8 +288,8 @@ interface TgMessage {
   from?: { id?: number; username?: string };
   location?: { latitude: number; longitude: number };
   photo?: { file_id: string; file_unique_id: string }[];
-  video?: { file_id: string; file_unique_id?: string; duration?: number };
-  document?: { file_id: string; mime_type?: string };
+  video?: { file_id: string; file_unique_id?: string; duration?: number; file_size?: number };
+  document?: { file_id: string; mime_type?: string; file_size?: number };
   contact?: { phone_number?: string };
 }
 interface TgCallback {
@@ -347,12 +347,27 @@ async function handleAdVideo(
   link: { project_id: string; user_id: string },
 ): Promise<void> {
   const chatId = msg.chat.id;
-  const fileId = msg.video?.file_id ?? msg.document?.file_id;
+  const media = msg.video ?? msg.document;
+  const fileId = media?.file_id;
   if (!fileId) return;
 
   const role = await effectiveRole(admin, link.project_id, link.user_id);
   if (!role || !LAUNCH_ROLES.includes(role)) {
     await sendMessage(chatId, "Автозапуск рекламы доступен таргетологу, маркетологу или директору.");
+    return;
+  }
+
+  // Telegram отдаёт ботам файлы только до 20 МБ — предупреждаем сразу.
+  const TG_FILE_LIMIT = 20 * 1024 * 1024;
+  const fileSize = media?.file_size ?? 0;
+  if (fileSize > TG_FILE_LIMIT) {
+    const mb = Math.round(fileSize / (1024 * 1024));
+    await sendMessage(
+      chatId,
+      `❌ Видео ${mb} МБ — Telegram не отдаёт ботам файлы больше 20 МБ.\n\n` +
+        "Пришли версию <b>до 20 МБ</b>: сожми ролик или сделай короче (10–20 сек для теста обычно хватает). " +
+        "Позже добавим загрузку тяжёлых видео прямо через сайт.",
+    );
     return;
   }
 
@@ -372,7 +387,11 @@ async function handleAdVideo(
 
   const fileUrl = await getFileUrl(fileId);
   if (!fileUrl) {
-    await sendMessage(chatId, "Не удалось получить файл из Telegram. Пришлите видео ещё раз.");
+    await sendMessage(
+      chatId,
+      "Не удалось скачать видео из Telegram — скорее всего, файл больше 20 МБ (лимит ботов). " +
+        "Пришли версию до 20 МБ (сожми или короче).",
+    );
     return;
   }
 
