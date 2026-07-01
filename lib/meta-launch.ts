@@ -226,6 +226,13 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
   const creative = await graphPost<{ id: string }>(`act_${acc}/adcreatives`, p.token, {
     name: `${base} · креатив`,
     object_story_spec: { page_id: p.pageId, video_data: videoData },
+    // Отказ от авто-«расширений браузера» (Позвонить/Messenger/WhatsApp/Форма) —
+    // Meta включает их сама, если не поставить OPT_OUT. Нам нужен только сайт.
+    degrees_of_freedom_spec: {
+      creative_features_spec: {
+        site_extensions: { enroll_status: "OPT_OUT" },
+      },
+    },
   });
 
   // 4. Объявление. Отключаем показ в блоке с несколькими рекламодателями.
