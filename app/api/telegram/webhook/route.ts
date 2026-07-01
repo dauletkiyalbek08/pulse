@@ -19,6 +19,7 @@ import {
   editMessageText,
   shiftKeyboard,
   saleKeyboard,
+  bossKeyboard,
   cancelKeyboard,
   acceptedButtons,
   leadCardAccepted,
@@ -34,7 +35,9 @@ type Admin = ReturnType<typeof createAdminClient>;
 // Запуск рекламы (загрузка видео + создание кампании) может идти дольше обычного.
 export const maxDuration = 60;
 
-const SELL_ROLES = ["owner", "director", "head_sales", "manager"];
+const SELL_ROLES = ["owner", "director", "head_sales", "manager"]; // для рейтингов/зарплат
+const SALE_ROLES = ["manager", "head_sales"]; // кто реально оформляет продажи
+const BOSS_ROLES = ["owner", "director", "marketer", "targetologist"]; // руководство/маркетинг
 
 /** Эффективная роль пользователя в проекте (для бота, через admin-клиент). */
 async function effectiveRole(
@@ -64,10 +67,10 @@ async function effectiveRole(
   return member?.role ?? null;
 }
 
-/** Клавиатура по роли: хантеру — смена, продавцу — продажа. */
+/** Клавиатура по роли: продавцу — продажа, руководству — отчёты/реклама, остальным — смена. */
 function keyboardForRole(role: string | null) {
-  if (role === "hunter") return shiftKeyboard();
-  if (role && SELL_ROLES.includes(role)) return saleKeyboard();
+  if (role && SALE_ROLES.includes(role)) return saleKeyboard();
+  if (role && BOSS_ROLES.includes(role)) return bossKeyboard();
   return shiftKeyboard();
 }
 
@@ -871,8 +874,8 @@ async function handleManagerSale(
   // Старт продажи
   if (text === "💰 Оформить продажу") {
     const role = await effectiveRole(admin, link.project_id, link.user_id);
-    if (!role || !SELL_ROLES.includes(role)) {
-      await sendMessage(chatId, "Оформлять продажи может только менеджер/руководитель.");
+    if (!role || !SALE_ROLES.includes(role)) {
+      await sendMessage(chatId, "Оформлять продажи может только менеджер.");
       return true;
     }
     await admin.from("tg_sale_drafts").upsert(
@@ -1045,9 +1048,11 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
       .maybeSingle();
     const role = await effectiveRole(admin, codeRow.project_id, codeRow.user_id);
     const hint =
-      role && SELL_ROLES.includes(role) && role !== "hunter"
+      role && SALE_ROLES.includes(role)
         ? "Нажмите «💰 Оформить продажу», когда клиент купит курс."
-        : "Нажмите «Я на смене», чтобы начать получать лиды.";
+        : role && BOSS_ROLES.includes(role)
+          ? "Команды: «📊 Отчёты» и «🎬 Реклама» (или /reklama для запуска рекламы)."
+          : "Нажмите «Я на смене», чтобы начать получать лиды.";
     await sendMessage(
       chatId,
       `✅ Аккаунт привязан, <b>${profile?.full_name ?? ""}</b>!\n${hint}`,
@@ -1238,10 +1243,16 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
   }
 
   const role = await effectiveRole(admin, link.project_id, link.user_id);
-  if (role && SELL_ROLES.includes(role) && role !== "hunter") {
+  if (role && SALE_ROLES.includes(role)) {
     await sendMessage(chatId, "Нажмите «💰 Оформить продажу», чтобы записать покупку клиента.", {
       replyMarkup: saleKeyboard(),
     });
+  } else if (role && BOSS_ROLES.includes(role)) {
+    await sendMessage(
+      chatId,
+      "Команды: «📊 Отчёты» — сводки, «🎬 Реклама» (или /reklama) — запуск рекламы.",
+      { replyMarkup: bossKeyboard() },
+    );
   } else {
     await sendMessage(
       chatId,

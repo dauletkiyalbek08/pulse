@@ -123,6 +123,14 @@ export function shiftKeyboard() {
   };
 }
 
+/** Клавиатура руководителя/маркетинга: отчёты и запуск рекламы (без продаж). */
+export function bossKeyboard() {
+  return {
+    keyboard: [[{ text: "📊 Отчёты" }, { text: "🎬 Реклама" }]],
+    resize_keyboard: true,
+  };
+}
+
 /** Клавиатура менеджера: оформить продажу. */
 export function saleKeyboard() {
   return {
