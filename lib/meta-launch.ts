@@ -299,6 +299,16 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
   return { campaignId: campaign.id, adsetId: adset.id, ads };
 }
 
+/** Изменить дневной бюджет группы объявлений (минорные единицы валюты). */
+export async function updateAdSetBudget(token: string, adsetId: string, dailyBudgetMinor: number) {
+  await graphPost(adsetId, token, { daily_budget: String(dailyBudgetMinor) });
+}
+
+/** Поставить кампанию на паузу. */
+export async function pauseCampaign(token: string, campaignId: string) {
+  await graphPost(campaignId, token, { status: "PAUSED" });
+}
+
 /* ─────────────────────────── Текст от AI ─────────────────────────── */
 
 export interface AdCopy {

@@ -141,6 +141,9 @@ export type Database = {
           geo_city: string | null
           collecting: boolean
           collect_msg_id: number | null
+          analyzed_at: string | null
+          raise_suggested: boolean
+          stop_suggested: boolean
           created_at: string
           updated_at: string
         }
@@ -167,6 +170,9 @@ export type Database = {
           geo_city?: string | null
           collecting?: boolean
           collect_msg_id?: number | null
+          analyzed_at?: string | null
+          raise_suggested?: boolean
+          stop_suggested?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -193,6 +199,9 @@ export type Database = {
           geo_city?: string | null
           collecting?: boolean
           collect_msg_id?: number | null
+          analyzed_at?: string | null
+          raise_suggested?: boolean
+          stop_suggested?: boolean
           created_at?: string
           updated_at?: string
         }

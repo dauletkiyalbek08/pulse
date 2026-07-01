@@ -412,6 +412,21 @@ export async function fetchTokenPermissions(token: string): Promise<string[]> {
     .map((p) => p.permission);
 }
 
+/** Итоги по кампании за период: расход и лиды (для авто-анализа). */
+export async function fetchCampaignInsights(
+  token: string,
+  campaignId: string,
+  since: string,
+  until: string,
+): Promise<{ spend: number; leads: number }> {
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
+  const url = `${GRAPH}/${campaignId}/insights?fields=spend,actions&time_range=${tr}&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url, { cache: "no-store" });
+  const json = (await res.json()) as InsightsResponse;
+  const row = json.data?.[0];
+  return { spend: Number(row?.spend || 0), leads: pickLeads(row?.actions) };
+}
+
 /** Facebook-страницы, доступные токену (для подписки на лид-формы). */
 export async function fetchPages(token: string): Promise<MetaPage[]> {
   const res = await fetch(

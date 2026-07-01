@@ -5,7 +5,14 @@ import { haversineMeters } from "@/lib/geo";
 import { reassignLead } from "@/lib/lead-dispatch";
 import { recordPurchase, type CapiOutcome } from "@/lib/purchase";
 import { decryptSecret } from "@/lib/crypto";
-import { uploadAdVideo, generateAdCopy, launchFromDraft, type AdCopy } from "@/lib/meta-launch";
+import {
+  uploadAdVideo,
+  generateAdCopy,
+  launchFromDraft,
+  updateAdSetBudget,
+  pauseCampaign,
+  type AdCopy,
+} from "@/lib/meta-launch";
 import {
   currentPeriod,
   periodLabel,
@@ -721,6 +728,74 @@ async function handleLaunchCallback(admin: Admin, cb: TgCallback): Promise<void>
     return;
   }
 
+  if (action === "adismiss") {
+    await answerCallback(cb.id, "Ок, оставили");
+    if (messageId) await editMessageText(chatId, messageId, "👌 Оставили как есть.");
+    return;
+  }
+
+  if (action === "araise" || action === "astop") {
+    const { data: l } = await admin
+      .from("ad_launches")
+      .select("campaign_id, adset_id, purpose, budget_usd")
+      .eq("id", id)
+      .eq("project_id", proj.project_id)
+      .maybeSingle();
+    if (!l || !l.campaign_id) {
+      await answerCallback(cb.id, "Кампания не найдена", true);
+      return;
+    }
+    const { data: integ } = await admin
+      .from("meta_integration")
+      .select("token_enc")
+      .eq("project_id", proj.project_id)
+      .eq("purpose", l.purpose)
+      .maybeSingle();
+    if (!integ) {
+      await answerCallback(cb.id, "Кабинет не подключён", true);
+      return;
+    }
+    let token: string;
+    try {
+      token = decryptSecret(integ.token_enc);
+    } catch {
+      await answerCallback(cb.id, "Ошибка токена", true);
+      return;
+    }
+
+    if (action === "araise") {
+      if (!l.adset_id) {
+        await answerCallback(cb.id, "Нет группы объявлений", true);
+        return;
+      }
+      const newBudget = Math.round(Number(l.budget_usd ?? 3) * 1.5 * 100) / 100;
+      try {
+        await updateAdSetBudget(token, l.adset_id, Math.round(newBudget * 100));
+      } catch (e) {
+        await answerCallback(cb.id, "Meta отклонила", true);
+        if (messageId) await editMessageText(chatId, messageId, `❌ Не удалось поднять бюджет: ${e instanceof Error ? e.message : "ошибка"}`);
+        return;
+      }
+      await admin.from("ad_launches").update({ budget_usd: newBudget, raise_suggested: false }).eq("id", id);
+      await answerCallback(cb.id, "Бюджет поднят");
+      if (messageId) await editMessageText(chatId, messageId, `📈 Бюджет поднят до $${newBudget}/день. Продолжаю следить.`);
+      return;
+    }
+
+    // astop
+    try {
+      await pauseCampaign(token, l.campaign_id);
+    } catch (e) {
+      await answerCallback(cb.id, "Meta отклонила", true);
+      if (messageId) await editMessageText(chatId, messageId, `❌ Не удалось остановить: ${e instanceof Error ? e.message : "ошибка"}`);
+      return;
+    }
+    await admin.from("ad_launches").update({ status: "paused" }).eq("id", id);
+    await answerCallback(cb.id, "Остановлено");
+    if (messageId) await editMessageText(chatId, messageId, "🛑 Кампания остановлена.");
+    return;
+  }
+
   if (action === "acdone") {
     const { count } = await admin
       .from("ad_launch_media")
@@ -1382,7 +1457,10 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
     action === "ageo" ||
     action === "aadv" ||
     action === "acdone" ||
-    action === "accancel"
+    action === "accancel" ||
+    action === "araise" ||
+    action === "astop" ||
+    action === "adismiss"
   ) {
     await handleLaunchCallback(admin, cb);
     return;
