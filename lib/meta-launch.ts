@@ -204,17 +204,13 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
   });
 
   // 2. Группа объявлений: бюджет + аудитория + цель оптимизации.
-  // Площадки только мобильные. Instagram/Threads — лишь при наличии IG-профиля;
-  // без него оставляем только Facebook (объявление от Страницы).
-  const publisherPlatforms = p.instagramUserId
-    ? ["facebook", "instagram", "threads"]
-    : ["facebook"];
+  // Площадки: Facebook + Instagram + Threads, только мобильные.
   const targeting: Record<string, unknown> = {
     geo_locations: p.geoLocations,
     age_min: p.ageMin,
     age_max: p.ageMax,
     device_platforms: ["mobile"],
-    publisher_platforms: publisherPlatforms,
+    publisher_platforms: ["facebook", "instagram", "threads"],
     targeting_automation: { advantage_audience: p.advantageAudience },
   };
   const genders = GENDER_CODE[p.gender];
