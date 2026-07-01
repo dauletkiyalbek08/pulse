@@ -130,6 +130,28 @@ export interface LaunchParams {
   namePrefix: string;
   objective: string; // traffic|leads
   pixelId: string | null; // нужен для оптимизации под заявки (leads)
+  advantageAudience: 0 | 1; // Advantage-аудитория: 1 — расширять, 0 — строго
+  geoLocations: Record<string, unknown>; // { countries:[...] } или { cities:[...] }
+}
+
+/**
+ * Поиск ключа города в Meta для таргетинга по городу (напр. «Алматы»).
+ * Возвращает geo-key или null (тогда таргетируем по стране).
+ */
+export async function findCityKey(
+  token: string,
+  name: string,
+  countryCode = "KZ",
+): Promise<string | null> {
+  const url =
+    `${GRAPH}/search?type=adgeolocation&location_types=${encodeURIComponent('["city"]')}` +
+    `&country_code=${countryCode}&q=${encodeURIComponent(name)}&limit=10&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url, { cache: "no-store" });
+  const json = (await res.json()) as {
+    data?: { key: string; name: string; country_code?: string }[];
+  };
+  const list = (json.data ?? []).filter((c) => !c.country_code || c.country_code === countryCode);
+  return list[0]?.key ?? null;
 }
 
 export interface LaunchIds {
@@ -160,11 +182,15 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
     is_adset_budget_sharing_enabled: false,
   });
 
-  // 2. Группа объявлений: бюджет + аудитория + цель оптимизации
+  // 2. Группа объявлений: бюджет + аудитория + цель оптимизации.
+  // Площадки: только Facebook, Instagram, Threads; только мобильные.
   const targeting: Record<string, unknown> = {
-    geo_locations: { countries: [p.country] },
+    geo_locations: p.geoLocations,
     age_min: p.ageMin,
     age_max: p.ageMax,
+    device_platforms: ["mobile"],
+    publisher_platforms: ["facebook", "instagram", "threads"],
+    targeting_automation: { advantage_audience: p.advantageAudience },
   };
   const genders = GENDER_CODE[p.gender];
   if (genders) targeting.genders = genders;
@@ -282,7 +308,7 @@ export interface LaunchResult {
 export async function launchFromDraft(admin: Admin, launchId: string): Promise<LaunchResult> {
   const { data: draft } = await admin
     .from("ad_launches")
-    .select("id, project_id, purpose, meta_video_id, thumb_url, primary_text, headline, budget_usd")
+    .select("id, project_id, purpose, meta_video_id, thumb_url, primary_text, headline, budget_usd, advantage, geo_city")
     .eq("id", launchId)
     .maybeSingle();
   if (!draft) return { ok: false, error: "Черновик не найден" };
@@ -358,6 +384,18 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
 
   const budgetUsd = Number(cfg?.daily_budget_usd ?? draft.budget_usd ?? 5);
   const dailyBudgetMinor = Math.max(100, Math.round(budgetUsd * 100)); // минимум $1
+  const country = cfg?.country ?? "KZ";
+
+  // Гео: конкретный город (если выбран и нашёлся ключ) или вся страна
+  let geoLocations: Record<string, unknown> = { countries: [country] };
+  if (draft.geo_city) {
+    try {
+      const key = await findCityKey(token, draft.geo_city, country);
+      if (key) geoLocations = { cities: [{ key, radius: 25, distance_unit: "mile" }] };
+    } catch {
+      // не нашли город — оставляем всю страну
+    }
+  }
 
   try {
     const ids = await launchAdSet({
@@ -366,10 +404,10 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
       pageId,
       videoId: draft.meta_video_id,
       thumbUrl: draft.thumb_url ?? state.thumbUrl,
-      headline: draft.headline ?? "Тегін диагностика",
+      headline: draft.headline ?? "Ағылшын тілі курсы",
       primaryText: draft.primary_text ?? "Ағылшын тілін нөлден үйреніңіз.",
       destinationUrl,
-      country: cfg?.country ?? "KZ",
+      country,
       ageMin: cfg?.age_min ?? 24,
       ageMax: cfg?.age_max ?? 55,
       gender: cfg?.gender ?? "all",
@@ -377,6 +415,8 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
       namePrefix: "Pulse авто",
       objective: cfg?.objective ?? "leads",
       pixelId: landing?.pixel_id ?? null,
+      advantageAudience: draft.advantage ? 1 : 0,
+      geoLocations,
     });
 
     await admin

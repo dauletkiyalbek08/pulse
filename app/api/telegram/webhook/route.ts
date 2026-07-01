@@ -319,7 +319,13 @@ const REPORT_ROLES = ["owner", "director", "head_sales", "marketer", "targetolog
 const LAUNCH_ROLES = ["owner", "director", "marketer", "targetologist"];
 
 /** Карточка черновика рекламы: текст, аудитория, бюджет — перед запуском. */
-function draftCardText(copy: AdCopy, budget: number, audience: string, destination: string): string {
+function draftCardText(
+  copy: AdCopy,
+  budget: number,
+  audience: string,
+  destination: string,
+  advantage: boolean,
+): string {
   return [
     "🎬 <b>Черновик рекламы готов</b>",
     "",
@@ -328,10 +334,12 @@ function draftCardText(copy: AdCopy, budget: number, audience: string, destinati
     copy.primaryText,
     "",
     `👥 <b>Аудитория:</b> ${audience}`,
+    "📱 <b>Плейсмент:</b> Facebook · Instagram · Threads, только мобильные",
+    `🎯 <b>Advantage-аудитория:</b> ${advantage ? "включена (шире)" : "выключена (строго по настройкам)"}`,
     `💵 <b>Бюджет:</b> $${budget}/день (тест)`,
     `🔗 <b>Ведёт на:</b> ${destination}`,
     "",
-    "Проверь и нажми «🚀 Запустить» — реклама уйдёт на модерацию Meta.",
+    "Настрой гео/Advantage кнопками ниже и нажми «🚀 Запустить».",
   ].join("\n");
 }
 
@@ -357,17 +365,26 @@ async function sendDraftCard(
   copy: AdCopy,
   editMessageId?: number,
 ): Promise<void> {
-  const { data: cfg } = await admin
-    .from("ad_launch_config")
-    .select("country, age_min, age_max, gender, daily_budget_usd, destination_url")
-    .eq("project_id", projectId)
-    .maybeSingle();
+  const [cfgRes, draftRes] = await Promise.all([
+    admin
+      .from("ad_launch_config")
+      .select("country, age_min, age_max, gender, daily_budget_usd, destination_url")
+      .eq("project_id", projectId)
+      .maybeSingle(),
+    admin.from("ad_launches").select("advantage, geo_city").eq("id", id).maybeSingle(),
+  ]);
+  const cfg = cfgRes.data;
+  const advantage = !!draftRes.data?.advantage;
+  const geoCity = draftRes.data?.geo_city ?? null;
+
   const budget = Number(cfg?.daily_budget_usd ?? 5);
-  const audience = `${cfg?.country ?? "KZ"}, ${cfg?.age_min ?? 24}–${cfg?.age_max ?? 55} лет, ${GENDER_RU[cfg?.gender ?? "all"]}`;
+  const geoLabel = geoCity || "Весь Казахстан";
+  const audience = `${geoLabel}, ${cfg?.age_min ?? 24}–${cfg?.age_max ?? 55} лет, ${GENDER_RU[cfg?.gender ?? "all"]}`;
   const destination = cfg?.destination_url ?? "квиз проекта";
-  const text = draftCardText(copy, budget, audience, destination);
-  if (editMessageId) await editMessageText(chatId, editMessageId, text, launchDraftButtons(id));
-  else await sendMessage(chatId, text, { buttons: launchDraftButtons(id) });
+  const text = draftCardText(copy, budget, audience, destination, advantage);
+  const buttons = launchDraftButtons(id, { advantage, geoCity });
+  if (editMessageId) await editMessageText(chatId, editMessageId, text, buttons);
+  else await sendMessage(chatId, text, { buttons });
 }
 
 /**
@@ -444,15 +461,11 @@ async function handleAdVideo(
     generateAdCopy(link.project_id, offer),
     admin
       .from("ad_launch_config")
-      .select("country, age_min, age_max, gender, daily_budget_usd, destination_url")
+      .select("daily_budget_usd")
       .eq("project_id", link.project_id)
       .maybeSingle(),
   ]);
-  const cfg = cfgRes.data;
-
-  const budget = Number(cfg?.daily_budget_usd ?? 5);
-  const audience = `${cfg?.country ?? "KZ"}, ${cfg?.age_min ?? 24}–${cfg?.age_max ?? 55} лет, ${GENDER_RU[cfg?.gender ?? "all"]}`;
-  const destination = cfg?.destination_url ?? "квиз проекта";
+  const budget = Number(cfgRes.data?.daily_budget_usd ?? 5);
 
   const { data: draft } = await admin
     .from("ad_launches")
@@ -477,16 +490,17 @@ async function handleAdVideo(
     return;
   }
 
-  await sendMessage(chatId, draftCardText(copy, budget, audience, destination), {
-    buttons: launchDraftButtons(draft.id),
-  });
+  await sendDraftCard(admin, chatId, link.project_id, draft.id, copy);
 }
 
 /** Callback черновика рекламы: запустить / переписать текст / отменить. */
 async function handleLaunchCallback(admin: Admin, cb: TgCallback): Promise<void> {
   const chatId = cb.message?.chat?.id;
   const messageId = cb.message?.message_id;
-  const [action, id] = String(cb.data ?? "").split(":");
+  const parts = String(cb.data ?? "").split(":");
+  const action = parts[0];
+  const id = parts[1];
+  const arg = parts[2];
   if (!chatId || !id) {
     await answerCallback(cb.id);
     return;
@@ -528,6 +542,31 @@ async function handleLaunchCallback(admin: Admin, cb: TgCallback): Promise<void>
       chatId,
       "✍️ Пришлите свой текст объявления одним сообщением (можно с эмодзи). Он заменит текст в черновике.",
     );
+    return;
+  }
+
+  if (action === "ageo") {
+    const geoCity = arg && arg !== "all" ? arg : null;
+    await admin.from("ad_launches").update({ geo_city: geoCity }).eq("id", id);
+    await answerCallback(cb.id, geoCity ? `Гео: ${geoCity}` : "Гео: весь Казахстан");
+    const copy: AdCopy = {
+      headline: draft.headline ?? "Ағылшын тілі курсы",
+      primaryText: draft.primary_text ?? "",
+    };
+    await sendDraftCard(admin, chatId, proj.project_id, id, copy, messageId);
+    return;
+  }
+
+  if (action === "aadv") {
+    const { data: cur } = await admin.from("ad_launches").select("advantage").eq("id", id).maybeSingle();
+    const next = !cur?.advantage;
+    await admin.from("ad_launches").update({ advantage: next }).eq("id", id);
+    await answerCallback(cb.id, next ? "Advantage включён" : "Advantage выключен");
+    const copy: AdCopy = {
+      headline: draft.headline ?? "Ағылшын тілі курсы",
+      primaryText: draft.primary_text ?? "",
+    };
+    await sendDraftCard(admin, chatId, proj.project_id, id, copy, messageId);
     return;
   }
 
@@ -1091,8 +1130,15 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
     return;
   }
 
-  // Автозапуск рекламы: запустить / переписать / свой текст / отменить
-  if (action === "alaunch" || action === "arewrite" || action === "acancel" || action === "atext") {
+  // Автозапуск рекламы: запустить / переписать / свой текст / гео / advantage / отменить
+  if (
+    action === "alaunch" ||
+    action === "arewrite" ||
+    action === "acancel" ||
+    action === "atext" ||
+    action === "ageo" ||
+    action === "aadv"
+  ) {
     await handleLaunchCallback(admin, cb);
     return;
   }

@@ -54,13 +54,31 @@ export async function getFileUrl(fileId: string): Promise<string | null> {
   return `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${path}`;
 }
 
-/** Кнопки черновика автозапуска рекламы. */
-export function launchDraftButtons(id: string): InlineButton[][] {
+/** Города-пресеты для гео-таргетинга (можно добавить ещё). */
+export const GEO_PRESETS = ["Алматы", "Астана", "Шымкент"];
+
+/** Кнопки черновика автозапуска рекламы (с выбором гео и Advantage). */
+export function launchDraftButtons(
+  id: string,
+  opts: { advantage?: boolean; geoCity?: string | null } = {},
+): InlineButton[][] {
+  const geoCity = opts.geoCity ?? null;
+  const mark = (active: boolean, label: string) => (active ? `• ${label}` : label);
   return [
     [{ text: "🚀 Запустить", callback_data: `alaunch:${id}` }],
     [
       { text: "🤖 AI-текст заново", callback_data: `arewrite:${id}` },
       { text: "✍️ Свой текст", callback_data: `atext:${id}` },
+    ],
+    [
+      { text: mark(!geoCity, "🇰🇿 Весь КЗ"), callback_data: `ageo:${id}:all` },
+      ...GEO_PRESETS.map((c) => ({ text: mark(geoCity === c, c), callback_data: `ageo:${id}:${c}` })),
+    ],
+    [
+      {
+        text: opts.advantage ? "Advantage: ВКЛ ✅" : "Advantage: выкл",
+        callback_data: `aadv:${id}`,
+      },
     ],
     [{ text: "❌ Отмена", callback_data: `acancel:${id}` }],
   ];

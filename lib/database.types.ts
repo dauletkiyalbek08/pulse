@@ -137,6 +137,8 @@ export type Database = {
           status: string
           error: string | null
           awaiting_text: boolean
+          advantage: boolean
+          geo_city: string | null
           created_at: string
           updated_at: string
         }
@@ -159,6 +161,8 @@ export type Database = {
           status?: string
           error?: string | null
           awaiting_text?: boolean
+          advantage?: boolean
+          geo_city?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -181,6 +185,8 @@ export type Database = {
           status?: string
           error?: string | null
           awaiting_text?: boolean
+          advantage?: boolean
+          geo_city?: string | null
           created_at?: string
           updated_at?: string
         }
