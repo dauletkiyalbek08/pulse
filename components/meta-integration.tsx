@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plug, Loader2, CheckCircle2, AlertTriangle, Link2Off } from "lucide-react";
+import { Plug, Loader2, CheckCircle2, AlertTriangle, Link2Off, ShieldCheck } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import {
   connectMeta,
   disconnectMeta,
+  checkMetaPermissions,
   type MetaStatus,
   type AdPurpose,
 } from "@/app/p/[projectId]/ads/integration-actions";
@@ -28,6 +29,7 @@ export function MetaIntegration({
   const [token, setToken] = useState("");
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [perms, setPerms] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
 
   const inputCls =
     "rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-brand focus:outline-none";
@@ -52,6 +54,31 @@ export function MetaIntegration({
       await disconnectMeta(projectId, purpose);
       setMsg(null);
       router.refresh();
+    });
+  }
+
+  function checkPerms() {
+    setPerms(null);
+    startTransition(async () => {
+      const res = await checkMetaPermissions(projectId, purpose);
+      if (!res.ok) {
+        setPerms({ kind: "warn", text: res.error ?? "Не удалось проверить права" });
+        return;
+      }
+      if (res.canLaunch) {
+        const extra = res.missing && res.missing.length > 0
+          ? ` Не хватает для лид-форм: ${res.missing.join(", ")}.`
+          : "";
+        setPerms({
+          kind: "ok",
+          text: `✅ Есть право на управление рекламой — автозапуск возможен.${extra}`,
+        });
+      } else {
+        setPerms({
+          kind: "warn",
+          text: "⚠️ У токена нет права «ads_management». Для автозапуска рекламы переподключите кабинет токеном с этим правом.",
+        });
+      }
     });
   }
 
@@ -173,6 +200,26 @@ export function MetaIntegration({
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2Off className="h-4 w-4" />}
         </button>
       </div>
+
+      <button
+        type="button"
+        onClick={checkPerms}
+        disabled={pending}
+        className="mt-2 inline-flex items-center gap-1.5 self-start rounded-lg border border-line bg-canvas px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface disabled:opacity-60"
+      >
+        <ShieldCheck className="h-3.5 w-3.5 text-brand-ink" />
+        Проверить права для автозапуска
+      </button>
+
+      {perms && (
+        <p
+          className={`mt-2 rounded-lg px-3 py-2 text-xs ${
+            perms.kind === "ok" ? "bg-brand-soft text-brand-ink" : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          {perms.text}
+        </p>
+      )}
 
       {msg && <Banner msg={msg} />}
     </div>

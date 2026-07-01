@@ -5,7 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveRole } from "@/lib/queries";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
-import { verifyMetaAccount, fetchMetaInsights, fetchMetaCampaigns, fetchPages } from "@/lib/meta";
+import {
+  verifyMetaAccount,
+  fetchMetaInsights,
+  fetchMetaCampaigns,
+  fetchPages,
+  fetchTokenPermissions,
+} from "@/lib/meta";
 
 const MANAGE_ROLES = ["owner", "director", "marketer", "targetologist"];
 
@@ -119,6 +125,58 @@ export async function disconnectMeta(
     .eq("purpose", purposeOf(purpose));
   revalidatePath(`/p/${projectId}/ads`);
   return { ok: true };
+}
+
+/* ─────────────── Проверка прав токена (для автозапуска рекламы) ─────────────── */
+
+/** Права, нужные боту-автозапуску: создавать кампании + видеть/использовать страницы. */
+const REQUIRED_LAUNCH_SCOPES = [
+  "ads_management",
+  "pages_show_list",
+  "pages_read_engagement",
+] as const;
+
+export interface MetaPermsResult {
+  ok: boolean;
+  error?: string;
+  granted?: string[];
+  missing?: string[];
+  canLaunch?: boolean; // есть ads_management — главное право для создания кампаний
+}
+
+/**
+ * Проверяет, какие права выданы токену подключённого кабинета `purpose`.
+ * Ничего не создаёт — только читает /me/permissions. Токен наружу не уходит.
+ */
+export async function checkMetaPermissions(
+  projectId: string,
+  purpose: AdPurpose = "course",
+): Promise<MetaPermsResult> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+
+  const admin = createAdminClient();
+  const { data: integ } = await admin
+    .from("meta_integration")
+    .select("token_enc")
+    .eq("project_id", projectId)
+    .eq("purpose", purposeOf(purpose))
+    .maybeSingle();
+  if (!integ) return { ok: false, error: "Кабинет не подключён" };
+
+  let granted: string[];
+  try {
+    granted = await fetchTokenPermissions(decryptSecret(integ.token_enc));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Не удалось проверить права" };
+  }
+
+  const missing = REQUIRED_LAUNCH_SCOPES.filter((s) => !granted.includes(s));
+  return {
+    ok: true,
+    granted,
+    missing,
+    canLaunch: granted.includes("ads_management"),
+  };
 }
 
 /* ───────────────────────── Lead Ads (формы) ───────────────────────── */

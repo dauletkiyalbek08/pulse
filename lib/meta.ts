@@ -395,6 +395,23 @@ export interface MetaPage {
   name: string;
 }
 
+/** Права (scopes), выданные токену: GET /me/permissions → только granted. */
+export async function fetchTokenPermissions(token: string): Promise<string[]> {
+  const res = await fetch(
+    `${GRAPH}/me/permissions?access_token=${encodeURIComponent(token)}`,
+    { cache: "no-store" },
+  );
+  const json = (await res.json()) as GraphError & {
+    data?: { permission: string; status: string }[];
+  };
+  if (!res.ok || json.error) {
+    throw new Error(json.error?.message ?? "Не удалось проверить права токена");
+  }
+  return (json.data ?? [])
+    .filter((p) => p.status === "granted")
+    .map((p) => p.permission);
+}
+
 /** Facebook-страницы, доступные токену (для подписки на лид-формы). */
 export async function fetchPages(token: string): Promise<MetaPage[]> {
   const res = await fetch(
