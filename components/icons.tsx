@@ -31,6 +31,7 @@ import {
   Package,
   Music2,
   Circle,
+  CircleUser,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +50,7 @@ export function getProjectIcon(key: string | null | undefined): LucideIcon {
 /** Иконки пунктов бокового меню (см. lib/menu). */
 export const MENU_ICONS: Record<string, LucideIcon> = {
   home: Home,
+  my: CircleUser,
   leads: Users,
   funnel: Filter,
   trials: BookOpen,

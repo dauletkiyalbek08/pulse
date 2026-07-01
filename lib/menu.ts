@@ -19,7 +19,10 @@ export interface MenuSection {
 const EDUCATION_MENU: MenuSection[] = [
   {
     title: "Обзор",
-    items: [{ label: "Главная", segment: "", icon: "home" }],
+    items: [
+      { label: "Главная", segment: "", icon: "home" },
+      { label: "Мой отчёт", segment: "my", icon: "my" },
+    ],
   },
   {
     title: "Продажи и CRM",
@@ -76,7 +79,10 @@ const EDUCATION_MENU: MenuSection[] = [
 const ECOMMERCE_MENU: MenuSection[] = [
   {
     title: "Обзор",
-    items: [{ label: "Главная", segment: "", icon: "home" }],
+    items: [
+      { label: "Главная", segment: "", icon: "home" },
+      { label: "Мой отчёт", segment: "my", icon: "my" },
+    ],
   },
   {
     title: "Продажи и CRM",
@@ -108,7 +114,10 @@ const ECOMMERCE_MENU: MenuSection[] = [
 const GENERAL_MENU: MenuSection[] = [
   {
     title: "Обзор",
-    items: [{ label: "Главная", segment: "", icon: "home" }],
+    items: [
+      { label: "Главная", segment: "", icon: "home" },
+      { label: "Мой отчёт", segment: "my", icon: "my" },
+    ],
   },
   {
     title: "Продажи и CRM",
@@ -170,7 +179,7 @@ export function getMenu(niche: Niche): MenuSection[] {
  * Базовые разделы — всегда видны, их нельзя выключить:
  * Главная (""), Настройки (settings), Права доступа (access).
  */
-export const CORE_SEGMENTS = ["", "settings", "access"];
+export const CORE_SEGMENTS = ["", "my", "settings", "access"];
 
 export function isCoreSegment(segment: string): boolean {
   return CORE_SEGMENTS.includes(segment);

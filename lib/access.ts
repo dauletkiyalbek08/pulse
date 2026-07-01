@@ -12,8 +12,8 @@ import type { MenuSection } from "@/lib/menu";
 const SALES_CRM = ["leads", "funnel", "trials", "sales", "clients", "calls", "team"];
 const MARKETING = ["ads", "creatives", "marketing", "smm", "capi", "resources", "ai"];
 const FINANCE = ["finance", "contracts"];
-// Главная, посещаемость и «своя зарплата» доступны каждому сотруднику.
-const BASE = ["", "attendance", "salaries"];
+// Главная, «Мой отчёт», посещаемость и «своя зарплата» доступны каждому сотруднику.
+const BASE = ["", "my", "attendance", "salaries"];
 
 /** "*" = полный доступ. */
 const ACCESS: Record<string, string[]> = {
