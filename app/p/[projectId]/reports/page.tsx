@@ -231,7 +231,13 @@ export default async function ReportsPage({
             metric={audience.regionHasLeads ? "leads" : "clicks"}
             max={10}
           />
-          <BreakdownBars title="По возрасту" rows={audience.byAge} max={8} />
+          <BreakdownBars
+            title="По возрасту"
+            rows={audience.byAge}
+            max={8}
+            targetLabels={["25-34", "35-44", "45-54"]}
+            targetTitle="Целевая аудитория 24–55"
+          />
           <BreakdownBars title="По полу" rows={audience.byGender} max={4} />
         </div>
         {audience.connected && !audience.regionHasLeads && (
