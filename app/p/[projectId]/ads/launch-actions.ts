@@ -87,6 +87,7 @@ export async function createWebDraft(
     kind: "video" | "image";
     meta_video_id: string | null;
     image_url: string | null;
+    storage_path: string;
     position: number;
   }[] = [];
   try {
@@ -97,9 +98,9 @@ export async function createWebDraft(
       if (!publicUrl) continue;
       if (item.kind === "video") {
         const vid = await uploadAdVideo(integ.ad_account_id, token, publicUrl, "Pulse авто (сайт)");
-        mediaToInsert.push({ kind: "video", meta_video_id: vid, image_url: null, position: pos++ });
+        mediaToInsert.push({ kind: "video", meta_video_id: vid, image_url: null, storage_path: item.path, position: pos++ });
       } else {
-        mediaToInsert.push({ kind: "image", meta_video_id: null, image_url: publicUrl, position: pos++ });
+        mediaToInsert.push({ kind: "image", meta_video_id: null, image_url: publicUrl, storage_path: item.path, position: pos++ });
       }
     }
   } catch (e) {

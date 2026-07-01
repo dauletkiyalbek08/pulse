@@ -641,7 +641,7 @@ async function addCollectMedia(
       const up = await admin.storage.from("ad-videos").upload(path, buf, { contentType: imageMime });
       if (up.error) throw new Error("storage");
       const { data: pub } = admin.storage.from("ad-videos").getPublicUrl(path);
-      await admin.from("ad_launch_media").insert({ launch_id: draft.id, kind: "image", image_url: pub.publicUrl, position });
+      await admin.from("ad_launch_media").insert({ launch_id: draft.id, kind: "image", image_url: pub.publicUrl, storage_path: path, position });
     } catch {
       await sendMessage(chatId, "Не удалось сохранить картинку. Попробуйте ещё раз.");
       return;
@@ -706,6 +706,15 @@ async function handleLaunchCallback(admin: Admin, cb: TgCallback): Promise<void>
   }
 
   if (action === "accancel") {
+    const { data: mrows } = await admin.from("ad_launch_media").select("storage_path").eq("launch_id", id);
+    const paths = (mrows ?? []).map((m) => m.storage_path).filter((p): p is string => !!p);
+    if (paths.length > 0) {
+      try {
+        await admin.storage.from("ad-videos").remove(paths);
+      } catch {
+        // не критично
+      }
+    }
     await admin.from("ad_launches").delete().eq("id", id);
     await answerCallback(cb.id, "Отменено");
     if (messageId) await editMessageText(chatId, messageId, "❌ Кампания отменена.");

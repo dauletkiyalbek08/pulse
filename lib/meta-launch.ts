@@ -392,7 +392,7 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
   // Медиа запуска: несколько креативов (видео/картинки). Back-compat: одиночное meta_video_id.
   const { data: mediaRows } = await admin
     .from("ad_launch_media")
-    .select("id, kind, meta_video_id, image_url, thumb_url, position")
+    .select("id, kind, meta_video_id, image_url, thumb_url, storage_path, position")
     .eq("launch_id", launchId)
     .order("position");
 
@@ -535,6 +535,19 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
         updated_at: new Date().toISOString(),
       })
       .eq("id", launchId);
+
+    // Авто-очистка исходников в хранилище: Meta уже приняла видео и создала
+    // креативы (картинки ингестятся при создании). Файлы больше не нужны.
+    const paths = (mediaRows ?? [])
+      .map((m) => m.storage_path)
+      .filter((p): p is string => !!p);
+    if (paths.length > 0) {
+      try {
+        await admin.storage.from("ad-videos").remove(paths);
+      } catch {
+        // не критично: место освободится позже
+      }
+    }
 
     return { ok: true, adId: ids.ads[0]?.adId, campaignId: ids.campaignId };
   } catch (e) {

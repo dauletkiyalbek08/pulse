@@ -208,6 +208,7 @@ export type Database = {
           thumb_url: string | null
           meta_creative_id: string | null
           meta_ad_id: string | null
+          storage_path: string | null
           position: number
           created_at: string
         }
@@ -220,6 +221,7 @@ export type Database = {
           thumb_url?: string | null
           meta_creative_id?: string | null
           meta_ad_id?: string | null
+          storage_path?: string | null
           position?: number
           created_at?: string
         }
@@ -232,6 +234,7 @@ export type Database = {
           thumb_url?: string | null
           meta_creative_id?: string | null
           meta_ad_id?: string | null
+          storage_path?: string | null
           position?: number
           created_at?: string
         }
