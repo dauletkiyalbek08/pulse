@@ -1336,6 +1336,42 @@ export type Database = {
         }
         Relationships: []
       }
+      report_targets: {
+        Row: {
+          chat_id: number
+          created_at: string
+          created_by: string | null
+          enabled: boolean
+          frequency: string
+          id: string
+          kind: string
+          project_id: string
+          title: string | null
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          frequency: string
+          id?: string
+          kind: string
+          project_id: string
+          title?: string | null
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          frequency?: string
+          id?: string
+          kind?: string
+          project_id?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
       telegram_link_codes: {
         Row: {
           code: string

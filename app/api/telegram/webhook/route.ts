@@ -20,7 +20,10 @@ import {
   cancelKeyboard,
   acceptedButtons,
   leadCardAccepted,
+  reportMenuButtons,
+  reportSubscribeButtons,
 } from "@/lib/telegram";
+import { buildReport, onDemandPeriod } from "@/lib/reports-tg";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -272,9 +275,9 @@ async function pendingLeadIds(admin: Admin, projectId: string, userId: string) {
 }
 
 interface TgMessage {
-  chat: { id: number };
+  chat: { id: number; title?: string; type?: string };
   text?: string;
-  from?: { username?: string };
+  from?: { id?: number; username?: string };
   location?: { latitude: number; longitude: number };
   photo?: { file_id: string; file_unique_id: string }[];
   contact?: { phone_number?: string };
@@ -282,7 +285,8 @@ interface TgMessage {
 interface TgCallback {
   id: string;
   data?: string;
-  message?: { chat?: { id: number }; message_id?: number };
+  from?: { id?: number };
+  message?: { chat?: { id: number; title?: string }; message_id?: number };
 }
 interface TgUpdate {
   message?: TgMessage;
@@ -296,6 +300,25 @@ async function findLink(admin: Admin, chatId: number) {
     .eq("chat_id", chatId)
     .maybeSingle();
   return data;
+}
+
+/** Кому доступны отчёты (личка + группы). */
+const REPORT_ROLES = ["owner", "director", "head_sales", "marketer", "targetologist"];
+
+/**
+ * Определить проект по чату: в личке — по chat_id; в группе — по Telegram-id
+ * отправителя (его личный chat_id = его user id в Telegram, где он привязан).
+ */
+async function resolveProject(admin: Admin, chatId: number, fromId?: number) {
+  const byChat = await findLink(admin, chatId);
+  if (byChat) return byChat;
+  if (fromId == null) return null;
+  const { data } = await admin
+    .from("telegram_links")
+    .select("user_id, project_id")
+    .eq("chat_id", fromId)
+    .limit(1);
+  return data?.[0] ?? null;
 }
 
 async function startShift(
@@ -546,6 +569,25 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     return;
   }
 
+  // Отчёты — работают и в личке, и в группах (по отправителю). До проверки привязки чата.
+  const cmd = (text ?? "").split("@")[0];
+  if (cmd === "/report" || cmd === "/otchet" || text === "📊 Отчёты") {
+    const proj = await resolveProject(admin, chatId, msg.from?.id);
+    if (!proj) {
+      await sendMessage(chatId, "Сначала привяжите аккаунт в личке с ботом (в Pulse → «Подключить Telegram»).");
+      return;
+    }
+    const role = await effectiveRole(admin, proj.project_id, proj.user_id);
+    if (!role || !REPORT_ROLES.includes(role)) {
+      await sendMessage(chatId, "Отчёты доступны руководителю и маркетингу.");
+      return;
+    }
+    await sendMessage(chatId, "📊 Какой отчёт прислать? Можно подписать этот чат на автоотчёт.", {
+      buttons: reportMenuButtons(),
+    });
+    return;
+  }
+
   const link = await findLink(admin, chatId);
   if (!link) {
     await sendMessage(chatId, "Аккаунт не привязан. Откройте ссылку привязки из Pulse.");
@@ -661,10 +703,85 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
   }
 }
 
+async function handleReportCallback(admin: Admin, cb: TgCallback) {
+  const chatId = cb.message?.chat?.id;
+  const messageId = cb.message?.message_id;
+  if (!chatId) {
+    await answerCallback(cb.id);
+    return;
+  }
+  const parts = String(cb.data ?? "").split(":");
+  const action = parts[0];
+
+  const proj = await resolveProject(admin, chatId, cb.from?.id);
+  if (!proj) {
+    await answerCallback(cb.id, "Аккаунт не привязан", true);
+    return;
+  }
+  const role = await effectiveRole(admin, proj.project_id, proj.user_id);
+  if (!role || !REPORT_ROLES.includes(role)) {
+    await answerCallback(cb.id, "Нет прав", true);
+    return;
+  }
+
+  if (action === "rep") {
+    const pk = (parts[1] as "day" | "week" | "month") ?? "day";
+    await answerCallback(cb.id, "Готовлю отчёт…");
+    const text = await buildReport(admin, proj.project_id, "full", onDemandPeriod(pk));
+    await sendMessage(chatId, text);
+    return;
+  }
+
+  if (action === "repsub") {
+    await answerCallback(cb.id);
+    if (messageId) {
+      await editMessageText(
+        chatId,
+        messageId,
+        "🔔 Выберите отчёт и частоту авто-отправки в этот чат:",
+        reportSubscribeButtons(),
+      );
+    }
+    return;
+  }
+
+  // repset:<kind>:<freq>
+  const kind = parts[1];
+  const freq = parts[2];
+  if (kind === "off") {
+    await admin.from("report_targets").update({ enabled: false }).eq("project_id", proj.project_id).eq("chat_id", chatId);
+    await answerCallback(cb.id, "Автоотчёт выключен");
+    if (messageId) await editMessageText(chatId, messageId, "❌ Автоотчёт для этого чата выключен.");
+    return;
+  }
+  await admin.from("report_targets").upsert(
+    {
+      project_id: proj.project_id,
+      chat_id: chatId,
+      title: cb.message?.chat?.title ?? null,
+      kind,
+      frequency: freq,
+      enabled: true,
+      created_by: proj.user_id,
+    },
+    { onConflict: "project_id,chat_id,kind" },
+  );
+  const kindRu = kind === "sales" ? "Продажи" : kind === "marketing" ? "Маркетинг" : "Полный";
+  const freqRu = freq === "daily" ? "ежедневно" : freq === "weekly" ? "еженедельно" : "ежемесячно";
+  await answerCallback(cb.id, "Подписка сохранена");
+  if (messageId) await editMessageText(chatId, messageId, `✅ Автоотчёт «${kindRu}» будет приходить сюда ${freqRu}.`);
+}
+
 async function handleCallback(admin: Admin, cb: TgCallback) {
   const chatId = cb.message?.chat?.id;
   const messageId = cb.message?.message_id;
   const [action, leadId] = String(cb.data ?? "").split(":");
+
+  // Отчёты (личка и группы) — до лид-логики
+  if (action === "rep" || action === "repsub" || action === "repset") {
+    await handleReportCallback(admin, cb);
+    return;
+  }
 
   // Уход со смены с непринятыми лидами
   if (action === "leave_transfer" || action === "leave_cancel") {

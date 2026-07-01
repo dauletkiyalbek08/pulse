@@ -98,6 +98,38 @@ export function cancelKeyboard() {
   };
 }
 
+/** Меню отчётов: прислать сейчас за период + подписка чата на автоотчёт. */
+export function reportMenuButtons(): InlineButton[][] {
+  return [
+    [
+      { text: "📅 За день", callback_data: "rep:day" },
+      { text: "🗓 За неделю", callback_data: "rep:week" },
+      { text: "📆 За месяц", callback_data: "rep:month" },
+    ],
+    [{ text: "🔔 Автоотчёт в этот чат", callback_data: "repsub" }],
+  ];
+}
+
+/** Подписка чата: тип отчёта × частота. */
+export function reportSubscribeButtons(): InlineButton[][] {
+  return [
+    [
+      { text: "Продажи · день", callback_data: "repset:sales:daily" },
+      { text: "Продажи · неделя", callback_data: "repset:sales:weekly" },
+    ],
+    [
+      { text: "Маркетинг · день", callback_data: "repset:marketing:daily" },
+      { text: "Маркетинг · неделя", callback_data: "repset:marketing:weekly" },
+    ],
+    [
+      { text: "Полный · день", callback_data: "repset:full:daily" },
+      { text: "Полный · неделя", callback_data: "repset:full:weekly" },
+      { text: "Полный · месяц", callback_data: "repset:full:monthly" },
+    ],
+    [{ text: "❌ Выключить автоотчёт", callback_data: "repset:off:off" }],
+  ];
+}
+
 export function leadCard(lead: {
   full_name: string;
   phone: string | null;
