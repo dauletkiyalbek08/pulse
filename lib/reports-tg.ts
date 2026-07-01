@@ -50,24 +50,25 @@ export function onDemandPeriod(kind: "day" | "week" | "month"): Period {
   return { fromYmd: from, toYmd: today, label: `за ${monthName(today)} (по ${dm(today)})` };
 }
 
-/** Период для авто-отправки по расписанию; null — сегодня отправлять не нужно. */
+/**
+ * Период для авто-отправки по расписанию (запуск вечером, 23:00 Алматы —
+ * конец дня): daily — за сегодня; weekly — вечером воскресенья за прошедшую
+ * неделю; monthly — в последний день месяца за месяц. null — сегодня не нужно.
+ */
 export function cronPeriod(freq: Frequency, nowYmd: string = almatyYmd()): Period | null {
   const weekday = new Date(nowYmd + "T00:00:00Z").getUTCDay(); // 0=вс,1=пн
-  const dom = Number(nowYmd.slice(8, 10));
   if (freq === "daily") {
-    const y = ymdAdd(nowYmd, -1);
-    return { fromYmd: y, toYmd: y, label: `за вчера (${dm(y)})` };
+    return { fromYmd: nowYmd, toYmd: nowYmd, label: `за сегодня (${dm(nowYmd)})` };
   }
   if (freq === "weekly") {
-    if (weekday !== 1) return null; // только по понедельникам
-    const from = ymdAdd(nowYmd, -7);
-    const to = ymdAdd(nowYmd, -1);
-    return { fromYmd: from, toYmd: to, label: `за неделю (${dm(from)}–${dm(to)})` };
+    if (weekday !== 0) return null; // только вечером воскресенья — итог недели
+    const from = ymdAdd(nowYmd, -6);
+    return { fromYmd: from, toYmd: nowYmd, label: `за неделю (${dm(from)}–${dm(nowYmd)})` };
   }
-  if (dom !== 1) return null; // monthly — только 1-го числа
-  const last = ymdAdd(nowYmd, -1);
-  const from = last.slice(0, 8) + "01";
-  return { fromYmd: from, toYmd: last, label: `за ${monthName(last)}` };
+  // monthly — только в последний день месяца (завтра уже другой месяц)
+  if (ymdAdd(nowYmd, 1).slice(5, 7) === nowYmd.slice(5, 7)) return null;
+  const from = nowYmd.slice(0, 8) + "01";
+  return { fromYmd: from, toYmd: nowYmd, label: `за ${monthName(nowYmd)}` };
 }
 
 async function salesBlock(admin: Admin, projectId: string, p: Period): Promise<string> {
