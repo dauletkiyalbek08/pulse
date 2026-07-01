@@ -139,6 +139,7 @@ export type Database = {
           awaiting_text: boolean
           advantage: boolean
           geo_city: string | null
+          collecting: boolean
           created_at: string
           updated_at: string
         }
@@ -163,6 +164,7 @@ export type Database = {
           awaiting_text?: boolean
           advantage?: boolean
           geo_city?: string | null
+          collecting?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -187,6 +189,7 @@ export type Database = {
           awaiting_text?: boolean
           advantage?: boolean
           geo_city?: string | null
+          collecting?: boolean
           created_at?: string
           updated_at?: string
         }

@@ -493,6 +493,155 @@ async function handleAdVideo(
   await sendDraftCard(admin, chatId, link.project_id, draft.id, copy);
 }
 
+/** Активная «сборка кампании» этого чата (несколько креативов в один запуск). */
+async function getCollectingDraft(admin: Admin, chatId: number) {
+  const { data } = await admin
+    .from("ad_launches")
+    .select("id, project_id, offer")
+    .eq("chat_id", chatId)
+    .eq("collecting", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+const collectButtons = (id: string) => [
+  [
+    { text: "✅ Готово", callback_data: `acdone:${id}` },
+    { text: "❌ Отмена", callback_data: `accancel:${id}` },
+  ],
+];
+
+/** Старт сборки кампании: /reklama → шлём файлы по одному → «Готово». */
+async function startCollect(admin: Admin, chatId: number, link: { project_id: string; user_id: string }) {
+  const role = await effectiveRole(admin, link.project_id, link.user_id);
+  if (!role || !LAUNCH_ROLES.includes(role)) {
+    await sendMessage(chatId, "Запуск рекламы доступен таргетологу, маркетологу или директору.");
+    return;
+  }
+  const { data: integ } = await admin
+    .from("meta_integration")
+    .select("ad_account_id")
+    .eq("project_id", link.project_id)
+    .eq("purpose", "course")
+    .maybeSingle();
+  if (!integ) {
+    await sendMessage(chatId, "Сначала подключите кабинет Meta в разделе «Реклама».");
+    return;
+  }
+  // Сброс прежней незавершённой сборки
+  await admin.from("ad_launches").delete().eq("chat_id", chatId).eq("collecting", true);
+
+  const { data: cfg } = await admin
+    .from("ad_launch_config")
+    .select("daily_budget_usd")
+    .eq("project_id", link.project_id)
+    .maybeSingle();
+
+  const { data: draft } = await admin
+    .from("ad_launches")
+    .insert({
+      project_id: link.project_id,
+      created_by: link.user_id,
+      chat_id: chatId,
+      purpose: "course",
+      status: "draft",
+      collecting: true,
+      budget_usd: Number(cfg?.daily_budget_usd ?? 5),
+    })
+    .select("id")
+    .maybeSingle();
+  if (!draft) {
+    await sendMessage(chatId, "Не удалось начать. Попробуйте ещё раз.");
+    return;
+  }
+  await sendMessage(
+    chatId,
+    "🎬 <b>Новая кампания</b>\n\nПрисылайте <b>видео</b> (до 20 МБ) и <b>картинки</b> по одному — можно с подписью-оффером. Все они уйдут в одну кампанию, Meta протестит их между собой.\n\nКогда закончите — нажмите «✅ Готово».",
+    { buttons: collectButtons(draft.id) },
+  );
+}
+
+/** Добавить присланный файл (видео/картинку) в собираемую кампанию. */
+async function addCollectMedia(
+  admin: Admin,
+  chatId: number,
+  link: { project_id: string; user_id: string },
+  draft: { id: string; project_id: string; offer: string | null },
+  msg: TgMessage,
+): Promise<void> {
+  const caption = (msg.caption ?? "").trim();
+  if (caption && !draft.offer) await admin.from("ad_launches").update({ offer: caption }).eq("id", draft.id);
+
+  const { data: integ } = await admin
+    .from("meta_integration")
+    .select("ad_account_id, token_enc")
+    .eq("project_id", link.project_id)
+    .eq("purpose", "course")
+    .maybeSingle();
+  if (!integ) {
+    await sendMessage(chatId, "Кабинет Meta не подключён.");
+    return;
+  }
+
+  const { count } = await admin
+    .from("ad_launch_media")
+    .select("id", { count: "exact", head: true })
+    .eq("launch_id", draft.id);
+  const position = count ?? 0;
+
+  const videoFileId = msg.video?.file_id ?? (msg.document?.mime_type?.startsWith("video/") ? msg.document.file_id : null);
+  const photoFileId = msg.photo?.length ? msg.photo[msg.photo.length - 1].file_id : null;
+
+  if (videoFileId) {
+    const size = msg.video?.file_size ?? msg.document?.file_size ?? 0;
+    if (size > 20 * 1024 * 1024) {
+      await sendMessage(chatId, "❌ Это видео больше 20 МБ. Для тяжёлых видео используйте загрузку через сайт. Пришлите версию до 20 МБ.");
+      return;
+    }
+    const url = await getFileUrl(videoFileId);
+    if (!url) {
+      await sendMessage(chatId, "Не удалось получить видео. Пришлите ещё раз.");
+      return;
+    }
+    try {
+      const token = decryptSecret(integ.token_enc);
+      const vid = await uploadAdVideo(integ.ad_account_id, token, url, "Pulse авто (бот)");
+      await admin.from("ad_launch_media").insert({ launch_id: draft.id, kind: "video", meta_video_id: vid, position });
+    } catch (e) {
+      await sendMessage(chatId, `Не удалось загрузить видео в Meta: ${e instanceof Error ? e.message : "ошибка"}`);
+      return;
+    }
+  } else if (photoFileId) {
+    const url = await getFileUrl(photoFileId);
+    if (!url) {
+      await sendMessage(chatId, "Не удалось получить картинку. Пришлите ещё раз.");
+      return;
+    }
+    try {
+      const resp = await fetch(url);
+      const buf = Buffer.from(await resp.arrayBuffer());
+      const path = `${link.project_id}/${Date.now()}-tg.jpg`;
+      const up = await admin.storage.from("ad-videos").upload(path, buf, { contentType: "image/jpeg" });
+      if (up.error) throw new Error("storage");
+      const { data: pub } = admin.storage.from("ad-videos").getPublicUrl(path);
+      await admin.from("ad_launch_media").insert({ launch_id: draft.id, kind: "image", image_url: pub.publicUrl, position });
+    } catch {
+      await sendMessage(chatId, "Не удалось сохранить картинку. Попробуйте ещё раз.");
+      return;
+    }
+  } else {
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `➕ Добавлено креативов: <b>${position + 1}</b>. Пришлите ещё или нажмите «✅ Готово».`,
+    { buttons: collectButtons(draft.id) },
+  );
+}
+
 /** Callback черновика рекламы: запустить / переписать текст / отменить. */
 async function handleLaunchCallback(admin: Admin, cb: TgCallback): Promise<void> {
   const chatId = cb.message?.chat?.id;
@@ -532,6 +681,33 @@ async function handleLaunchCallback(admin: Admin, cb: TgCallback): Promise<void>
     await admin.from("ad_launches").update({ status: "canceled" }).eq("id", id);
     await answerCallback(cb.id, "Отменено");
     if (messageId) await editMessageText(chatId, messageId, "❌ Черновик отменён.");
+    return;
+  }
+
+  if (action === "accancel") {
+    await admin.from("ad_launches").delete().eq("id", id);
+    await answerCallback(cb.id, "Отменено");
+    if (messageId) await editMessageText(chatId, messageId, "❌ Кампания отменена.");
+    return;
+  }
+
+  if (action === "acdone") {
+    const { count } = await admin
+      .from("ad_launch_media")
+      .select("id", { count: "exact", head: true })
+      .eq("launch_id", id);
+    if (!count) {
+      await answerCallback(cb.id, "Добавьте хотя бы один файл", true);
+      return;
+    }
+    await answerCallback(cb.id, "Готовлю черновик…");
+    const copy = await generateAdCopy(proj.project_id, draft.offer ?? "");
+    await admin
+      .from("ad_launches")
+      .update({ collecting: false, headline: copy.headline, primary_text: copy.primaryText, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (messageId) await editMessageText(chatId, messageId, `✅ Собрано креативов: ${count}. Черновик готов ниже 👇`);
+    await sendDraftCard(admin, chatId, proj.project_id, id, copy);
     return;
   }
 
@@ -907,7 +1083,34 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     return;
   }
 
-  // Видео-креатив (или видео-файл документом) → черновик автозапуска рекламы
+  // Старт сборки кампании из нескольких креативов
+  if (text === "/reklama" || text === "🎬 Реклама") {
+    await startCollect(admin, chatId, link);
+    return;
+  }
+
+  // Если идёт сборка кампании — присланные файлы уходят в неё
+  const collecting = await getCollectingDraft(admin, chatId);
+  if (collecting) {
+    const isVideo = !!msg.video || !!msg.document?.mime_type?.startsWith("video/");
+    if (isVideo) {
+      await addCollectMedia(admin, chatId, link, collecting, msg);
+      return;
+    }
+    if (msg.photo?.length) {
+      const { data: sale } = await admin
+        .from("tg_sale_drafts")
+        .select("chat_id")
+        .eq("chat_id", chatId)
+        .maybeSingle();
+      if (!sale) {
+        await addCollectMedia(admin, chatId, link, collecting, msg);
+        return;
+      }
+    }
+  }
+
+  // Одиночное видео (без сборки) → быстрый черновик автозапуска
   if (msg.video || msg.document?.mime_type?.startsWith("video/")) {
     await handleAdVideo(admin, msg, link);
     return;
@@ -1130,14 +1333,16 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
     return;
   }
 
-  // Автозапуск рекламы: запустить / переписать / свой текст / гео / advantage / отменить
+  // Автозапуск рекламы: запуск / текст / гео / advantage / сборка кампании
   if (
     action === "alaunch" ||
     action === "arewrite" ||
     action === "acancel" ||
     action === "atext" ||
     action === "ageo" ||
-    action === "aadv"
+    action === "aadv" ||
+    action === "acdone" ||
+    action === "accancel"
   ) {
     await handleLaunchCallback(admin, cb);
     return;
