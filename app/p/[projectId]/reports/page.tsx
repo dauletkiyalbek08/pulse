@@ -225,10 +225,21 @@ export default async function ReportsPage({
           {audience.connected ? "" : " · подключите Meta в разделе «Реклама»"}
         </p>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <BreakdownBars title="По городу / региону" rows={audience.byRegion} max={10} />
+          <BreakdownBars
+            title={audience.regionHasLeads ? "По городу / региону" : "По городу / региону (клики)"}
+            rows={audience.byRegion}
+            metric={audience.regionHasLeads ? "leads" : "clicks"}
+            max={10}
+          />
           <BreakdownBars title="По возрасту" rows={audience.byAge} max={8} />
           <BreakdownBars title="По полу" rows={audience.byGender} max={4} />
         </div>
+        {audience.connected && !audience.regionHasLeads && (
+          <p className="mt-2 text-xs text-faint">
+            Meta не отдаёт лиды в разрезе города для лид-форм — по региону показаны клики (переходы), это ближайший
+            сигнал «откуда заходят». Лиды по возрасту и полу — точные.
+          </p>
+        )}
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">

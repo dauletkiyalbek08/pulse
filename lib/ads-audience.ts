@@ -9,9 +9,11 @@ import { fetchMetaBreakdown, guessObjective, type MetaBreakdownRow } from "@/lib
 export interface AudienceBucket {
   label: string;
   leads: number;
+  clicks: number;
   spendUsd: number;
   impressions: number;
   cpl: number | null; // $ за лид
+  cpc: number | null; // $ за клик
 }
 
 export interface AudienceBreakdown {
@@ -19,6 +21,8 @@ export interface AudienceBreakdown {
   byRegion: AudienceBucket[];
   byAge: AudienceBucket[];
   byGender: AudienceBucket[];
+  /** Есть ли у Meta лиды в разрезе региона (для лид-форм — нет, тогда показываем клики). */
+  regionHasLeads: boolean;
   errors: string[];
 }
 
@@ -30,6 +34,7 @@ const GENDER_RU: Record<string, string> = {
 
 interface Agg {
   leads: number;
+  clicks: number;
   spend: number;
   impressions: number;
 }
@@ -39,17 +44,20 @@ function toBuckets(map: Map<string, Agg>, rename?: (k: string) => string): Audie
     .map(([key, a]) => ({
       label: rename ? rename(key) : key,
       leads: a.leads,
+      clicks: a.clicks,
       spendUsd: a.spend,
       impressions: a.impressions,
       cpl: a.leads > 0 ? a.spend / a.leads : null,
+      cpc: a.clicks > 0 ? a.spend / a.clicks : null,
     }))
-    .sort((x, y) => y.leads - x.leads || y.spendUsd - x.spendUsd);
+    .sort((x, y) => y.leads - x.leads || y.clicks - x.clicks || y.spendUsd - x.spendUsd);
 }
 
 function add(map: Map<string, Agg>, key: string | undefined, r: MetaBreakdownRow) {
   const k = (key ?? "").trim() || "—";
-  const a = map.get(k) ?? { leads: 0, spend: 0, impressions: 0 };
+  const a = map.get(k) ?? { leads: 0, clicks: 0, spend: 0, impressions: 0 };
   a.leads += r.leads;
+  a.clicks += r.clicks;
   a.spend += r.spend;
   a.impressions += r.impressions;
   map.set(k, a);
@@ -67,7 +75,7 @@ export async function getAudienceBreakdown(
     .eq("project_id", projectId);
 
   if (!integs || integs.length === 0) {
-    return { connected: false, byRegion: [], byAge: [], byGender: [], errors: [] };
+    return { connected: false, byRegion: [], byAge: [], byGender: [], regionHasLeads: false, errors: [] };
   }
 
   const region = new Map<string, Agg>();
@@ -98,11 +106,13 @@ export async function getAudienceBreakdown(
     }
   }
 
+  const byRegion = toBuckets(region);
   return {
     connected: true,
-    byRegion: toBuckets(region),
+    byRegion,
     byAge: toBuckets(age),
     byGender: toBuckets(gender, (k) => GENDER_RU[k] ?? k),
+    regionHasLeads: byRegion.some((b) => b.leads > 0),
     errors,
   };
 }

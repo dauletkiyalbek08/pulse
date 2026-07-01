@@ -140,9 +140,28 @@ export function RnpReport({
   );
 }
 
-/** Диаграмма РНП: столбцы — лиды по дням, линия — расход $. */
+interface ChartMetric {
+  key: keyof Pick<DailyAdRow, "spendUsd" | "leads" | "cpl" | "impressions" | "clicks" | "ctr">;
+  label: string;
+  rate: boolean; // true — усредняем (CPL, CTR), false — суммируем
+  fmt: (v: number) => string;
+}
+
+const CHART_METRICS: ChartMetric[] = [
+  { key: "spendUsd", label: "Расход, $", rate: false, fmt: (v) => formatUsd(v, 2) },
+  { key: "leads", label: "Лиды", rate: false, fmt: (v) => formatNumber(v) },
+  { key: "cpl", label: "CPL, $", rate: true, fmt: (v) => formatUsd(v, 2) },
+  { key: "impressions", label: "Показы", rate: false, fmt: (v) => formatNumber(v) },
+  { key: "clicks", label: "Клики", rate: false, fmt: (v) => formatNumber(v) },
+  { key: "ctr", label: "CTR, %", rate: true, fmt: (v) => `${v.toFixed(2)}%` },
+];
+
+/** Диаграмма РНП: одна выбранная метрика по дням (столбцы) — понятно и однозначно. */
 function RnpChart({ rows }: { rows: DailyAdRow[] }) {
+  const [metricKey, setMetricKey] = useState<ChartMetric["key"]>("spendUsd");
+  const metric = CHART_METRICS.find((m) => m.key === metricKey) ?? CHART_METRICS[0];
   const data = [...rows].sort((a, b) => (a.date < b.date ? -1 : 1));
+
   if (data.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center rounded-card bg-surface text-sm text-muted shadow-card ring-1 ring-line">
@@ -151,31 +170,60 @@ function RnpChart({ rows }: { rows: DailyAdRow[] }) {
     );
   }
 
+  const valAt = (d: DailyAdRow) => {
+    const v = d[metric.key];
+    return typeof v === "number" ? v : 0;
+  };
+
   const W = 800;
-  const H = 260;
-  const pad = { l: 8, r: 8, t: 16, b: 28 };
+  const H = 250;
+  const pad = { l: 8, r: 8, t: 14, b: 26 };
   const innerW = W - pad.l - pad.r;
   const innerH = H - pad.t - pad.b;
   const n = data.length;
-  const maxLeads = Math.max(...data.map((d) => d.leads), 1) * 1.15;
-  const maxSpend = Math.max(...data.map((d) => d.spendUsd), 1) * 1.15;
+  const maxV = Math.max(...data.map(valAt), 0);
+  const scaleMax = maxV > 0 ? maxV * 1.15 : 1;
 
   const step = innerW / n;
-  const barW = Math.min(step * 0.6, 34);
+  const barW = Math.min(step * 0.62, 36);
   const xc = (i: number) => pad.l + step * (i + 0.5);
-  const yLeads = (v: number) => pad.t + innerH - (v / maxLeads) * innerH;
-  const ySpend = (v: number) => pad.t + innerH - (v / maxSpend) * innerH;
-  const spendLine = data
-    .map((d, i) => `${i === 0 ? "M" : "L"}${xc(i).toFixed(1)} ${ySpend(d.spendUsd).toFixed(1)}`)
-    .join(" ");
-
-  const totalLeads = data.reduce((s, d) => s + d.leads, 0);
-  const totalSpend = data.reduce((s, d) => s + d.spendUsd, 0);
+  const yAt = (v: number) => pad.t + innerH - (v / scaleMax) * innerH;
   const labelEvery = Math.ceil(n / 8);
+
+  // Подпись под диаграммой: сумма или среднее
+  const nums = data.map(valAt);
+  const sum = nums.reduce((s, v) => s + v, 0);
+  const nonZero = data.filter((d) => typeof d[metric.key] === "number").length || 1;
+  const caption = metric.rate
+    ? `среднее ${metric.fmt(sum / nonZero)}`
+    : `всего ${metric.fmt(sum)}`;
 
   return (
     <div className="rounded-card bg-surface p-4 shadow-card ring-1 ring-line">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-64 w-full" role="img" aria-label="Диаграмма РНП">
+      {/* Выбор метрики */}
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {CHART_METRICS.map((m) => (
+          <button
+            key={m.key}
+            type="button"
+            onClick={() => setMetricKey(m.key)}
+            className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+              m.key === metricKey ? "bg-brand text-white" : "bg-canvas text-muted hover:text-ink"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-sm font-semibold text-ink">{metric.label} по дням</span>
+        <span className="text-xs text-faint">
+          макс {metric.fmt(maxV)} · {caption}
+        </span>
+      </div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-60 w-full" role="img" aria-label={`Диаграмма: ${metric.label} по дням`}>
         {[0, 0.5, 1].map((f, i) => (
           <line
             key={i}
@@ -188,30 +236,24 @@ function RnpChart({ rows }: { rows: DailyAdRow[] }) {
           />
         ))}
 
-        {/* Столбцы — лиды */}
         {data.map((d, i) => {
-          const y = yLeads(d.leads);
+          const y = yAt(valAt(d));
           return (
             <rect
               key={d.date}
               x={xc(i) - barW / 2}
               y={y}
               width={barW}
-              height={pad.t + innerH - y}
+              height={Math.max(pad.t + innerH - y, 0)}
               rx={3}
               fill="#10b981"
-              fillOpacity={0.85}
-            />
+              fillOpacity={0.9}
+            >
+              <title>{`${ddmm(d.date)}: ${metric.fmt(valAt(d))}`}</title>
+            </rect>
           );
         })}
 
-        {/* Линия — расход */}
-        <path d={spendLine} fill="none" stroke="#334155" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        {data.map((d, i) => (
-          <circle key={d.date} cx={xc(i)} cy={ySpend(d.spendUsd)} r={2.5} fill="#334155" />
-        ))}
-
-        {/* Подписи дат по оси X */}
         {data.map((d, i) =>
           i % labelEvery === 0 || i === n - 1 ? (
             <text key={d.date} x={xc(i)} y={H - 8} textAnchor="middle" fontSize="11" fill="#94a3b8">
@@ -220,15 +262,6 @@ function RnpChart({ rows }: { rows: DailyAdRow[] }) {
           ) : null,
         )}
       </svg>
-
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm bg-brand" /> Лиды · всего {formatNumber(totalLeads)}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-4 bg-slate-700" /> Расход · всего {formatUsd(totalSpend, 2)}
-        </span>
-      </div>
     </div>
   );
 }
