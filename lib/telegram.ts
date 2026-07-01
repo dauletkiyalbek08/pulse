@@ -98,13 +98,18 @@ export function cancelKeyboard() {
   };
 }
 
-/** Меню отчётов: прислать сейчас за период + подписка чата на автоотчёт. */
+/** Меню отчётов: прислать сейчас (РНП или полный) + подписка чата на автоотчёт. */
 export function reportMenuButtons(): InlineButton[][] {
   return [
     [
-      { text: "📅 За день", callback_data: "rep:day" },
-      { text: "🗓 За неделю", callback_data: "rep:week" },
-      { text: "📆 За месяц", callback_data: "rep:month" },
+      { text: "📣 РНП · день", callback_data: "rep:marketing:day" },
+      { text: "неделя", callback_data: "rep:marketing:week" },
+      { text: "месяц", callback_data: "rep:marketing:month" },
+    ],
+    [
+      { text: "📊 Полный · день", callback_data: "rep:full:day" },
+      { text: "неделя", callback_data: "rep:full:week" },
+      { text: "месяц", callback_data: "rep:full:month" },
     ],
     [{ text: "🔔 Автоотчёт в этот чат", callback_data: "repsub" }],
   ];

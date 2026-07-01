@@ -23,7 +23,7 @@ import {
   reportMenuButtons,
   reportSubscribeButtons,
 } from "@/lib/telegram";
-import { buildReport, onDemandPeriod } from "@/lib/reports-tg";
+import { buildReport, onDemandPeriod, type ReportKind } from "@/lib/reports-tg";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -725,9 +725,11 @@ async function handleReportCallback(admin: Admin, cb: TgCallback) {
   }
 
   if (action === "rep") {
-    const pk = (parts[1] as "day" | "week" | "month") ?? "day";
+    // rep:<kind>:<period>
+    const kind = (parts[1] as ReportKind) ?? "full";
+    const pk = (parts[2] as "day" | "week" | "month") ?? "day";
     await answerCallback(cb.id, "Готовлю отчёт…");
-    const text = await buildReport(admin, proj.project_id, "full", onDemandPeriod(pk));
+    const text = await buildReport(admin, proj.project_id, kind, onDemandPeriod(pk));
     await sendMessage(chatId, text);
     return;
   }
