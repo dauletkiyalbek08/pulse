@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineMeters } from "@/lib/geo";
 import { reassignLead } from "@/lib/lead-dispatch";
 import { recordPurchase, type CapiOutcome } from "@/lib/purchase";
+import { decryptSecret } from "@/lib/crypto";
+import { uploadAdVideo, generateAdCopy, launchFromDraft, type AdCopy } from "@/lib/meta-launch";
 import {
   currentPeriod,
   periodLabel,
@@ -22,10 +24,15 @@ import {
   leadCardAccepted,
   reportMenuButtons,
   reportSubscribeButtons,
+  getFileUrl,
+  launchDraftButtons,
 } from "@/lib/telegram";
 import { buildReport, onDemandPeriod, type ReportKind } from "@/lib/reports-tg";
 
 type Admin = ReturnType<typeof createAdminClient>;
+
+// Запуск рекламы (загрузка видео + создание кампании) может идти дольше обычного.
+export const maxDuration = 60;
 
 const SELL_ROLES = ["owner", "director", "head_sales", "manager"];
 
@@ -277,9 +284,12 @@ async function pendingLeadIds(admin: Admin, projectId: string, userId: string) {
 interface TgMessage {
   chat: { id: number; title?: string; type?: string };
   text?: string;
+  caption?: string;
   from?: { id?: number; username?: string };
   location?: { latitude: number; longitude: number };
   photo?: { file_id: string; file_unique_id: string }[];
+  video?: { file_id: string; file_unique_id?: string; duration?: number };
+  document?: { file_id: string; mime_type?: string };
   contact?: { phone_number?: string };
 }
 interface TgCallback {
@@ -304,6 +314,216 @@ async function findLink(admin: Admin, chatId: number) {
 
 /** Кому доступны отчёты (личка + группы). */
 const REPORT_ROLES = ["owner", "director", "head_sales", "marketer", "targetologist"];
+
+/** Кому доступен автозапуск рекламы через бота (кинуть видео). */
+const LAUNCH_ROLES = ["owner", "director", "marketer", "targetologist"];
+
+/** Карточка черновика рекламы: текст, аудитория, бюджет — перед запуском. */
+function draftCardText(copy: AdCopy, budget: number, audience: string, destination: string): string {
+  return [
+    "🎬 <b>Черновик рекламы готов</b>",
+    "",
+    `📝 <b>Заголовок:</b> ${copy.headline}`,
+    "",
+    copy.primaryText,
+    "",
+    `👥 <b>Аудитория:</b> ${audience}`,
+    `💵 <b>Бюджет:</b> $${budget}/день (тест)`,
+    `🔗 <b>Ведёт на:</b> ${destination}`,
+    "",
+    "Проверь и нажми «🚀 Запустить» — реклама уйдёт на модерацию Meta.",
+  ].join("\n");
+}
+
+const GENDER_RU: Record<string, string> = { all: "все", male: "мужчины", female: "женщины" };
+
+/**
+ * Приём видео-креатива: грузим в Meta, генерим текст от AI, сохраняем черновик
+ * и показываем карточку с кнопкой «Запустить». Ничего не тратится до подтверждения.
+ */
+async function handleAdVideo(
+  admin: Admin,
+  msg: TgMessage,
+  link: { project_id: string; user_id: string },
+): Promise<void> {
+  const chatId = msg.chat.id;
+  const fileId = msg.video?.file_id ?? msg.document?.file_id;
+  if (!fileId) return;
+
+  const role = await effectiveRole(admin, link.project_id, link.user_id);
+  if (!role || !LAUNCH_ROLES.includes(role)) {
+    await sendMessage(chatId, "Автозапуск рекламы доступен таргетологу, маркетологу или директору.");
+    return;
+  }
+
+  const { data: integ } = await admin
+    .from("meta_integration")
+    .select("ad_account_id, token_enc, currency")
+    .eq("project_id", link.project_id)
+    .eq("purpose", "course")
+    .maybeSingle();
+  if (!integ) {
+    await sendMessage(chatId, "Сначала подключите кабинет Meta в разделе «Реклама».");
+    return;
+  }
+
+  const offer = (msg.caption ?? "").trim();
+  await sendMessage(chatId, "🎬 Принял видео. Загружаю в Meta и готовлю черновик… (10–20 сек)");
+
+  const fileUrl = await getFileUrl(fileId);
+  if (!fileUrl) {
+    await sendMessage(chatId, "Не удалось получить файл из Telegram. Пришлите видео ещё раз.");
+    return;
+  }
+
+  let metaVideoId: string;
+  try {
+    const token = decryptSecret(integ.token_enc);
+    metaVideoId = await uploadAdVideo(integ.ad_account_id, token, fileUrl, "Pulse авто");
+  } catch (e) {
+    await sendMessage(
+      chatId,
+      `❌ Не удалось загрузить видео в Meta: ${e instanceof Error ? e.message : "ошибка"}`,
+    );
+    return;
+  }
+
+  const [copy, cfgRes] = await Promise.all([
+    generateAdCopy(link.project_id, offer),
+    admin
+      .from("ad_launch_config")
+      .select("country, age_min, age_max, gender, daily_budget_usd, destination_url")
+      .eq("project_id", link.project_id)
+      .maybeSingle(),
+  ]);
+  const cfg = cfgRes.data;
+
+  const budget = Number(cfg?.daily_budget_usd ?? 5);
+  const audience = `${cfg?.country ?? "KZ"}, ${cfg?.age_min ?? 24}–${cfg?.age_max ?? 55} лет, ${GENDER_RU[cfg?.gender ?? "all"]}`;
+  const destination = cfg?.destination_url ?? "квиз проекта";
+
+  const { data: draft } = await admin
+    .from("ad_launches")
+    .insert({
+      project_id: link.project_id,
+      created_by: link.user_id,
+      chat_id: chatId,
+      purpose: "course",
+      tg_file_id: fileId,
+      meta_video_id: metaVideoId,
+      offer: offer || null,
+      primary_text: copy.primaryText,
+      headline: copy.headline,
+      budget_usd: budget,
+      status: "draft",
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (!draft) {
+    await sendMessage(chatId, "Не удалось сохранить черновик. Попробуйте ещё раз.");
+    return;
+  }
+
+  await sendMessage(chatId, draftCardText(copy, budget, audience, destination), {
+    buttons: launchDraftButtons(draft.id),
+  });
+}
+
+/** Callback черновика рекламы: запустить / переписать текст / отменить. */
+async function handleLaunchCallback(admin: Admin, cb: TgCallback): Promise<void> {
+  const chatId = cb.message?.chat?.id;
+  const messageId = cb.message?.message_id;
+  const [action, id] = String(cb.data ?? "").split(":");
+  if (!chatId || !id) {
+    await answerCallback(cb.id);
+    return;
+  }
+
+  const proj = await resolveProject(admin, chatId, cb.from?.id);
+  if (!proj) {
+    await answerCallback(cb.id, "Аккаунт не привязан", true);
+    return;
+  }
+  const role = await effectiveRole(admin, proj.project_id, proj.user_id);
+  if (!role || !LAUNCH_ROLES.includes(role)) {
+    await answerCallback(cb.id, "Нет прав", true);
+    return;
+  }
+
+  const { data: draft } = await admin
+    .from("ad_launches")
+    .select("id, status, offer, headline, primary_text, budget_usd")
+    .eq("id", id)
+    .eq("project_id", proj.project_id)
+    .maybeSingle();
+  if (!draft) {
+    await answerCallback(cb.id, "Черновик не найден", true);
+    return;
+  }
+
+  if (action === "acancel") {
+    await admin.from("ad_launches").update({ status: "canceled" }).eq("id", id);
+    await answerCallback(cb.id, "Отменено");
+    if (messageId) await editMessageText(chatId, messageId, "❌ Черновик отменён.");
+    return;
+  }
+
+  if (action === "arewrite") {
+    await answerCallback(cb.id, "Переписываю текст…");
+    const copy = await generateAdCopy(proj.project_id, draft.offer ?? "");
+    await admin
+      .from("ad_launches")
+      .update({ primary_text: copy.primaryText, headline: copy.headline, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    const { data: cfg } = await admin
+      .from("ad_launch_config")
+      .select("country, age_min, age_max, gender, daily_budget_usd, destination_url")
+      .eq("project_id", proj.project_id)
+      .maybeSingle();
+    const budget = Number(draft.budget_usd ?? cfg?.daily_budget_usd ?? 5);
+    const audience = `${cfg?.country ?? "KZ"}, ${cfg?.age_min ?? 24}–${cfg?.age_max ?? 55} лет, ${GENDER_RU[cfg?.gender ?? "all"]}`;
+    const destination = cfg?.destination_url ?? "квиз проекта";
+    if (messageId) {
+      await editMessageText(chatId, messageId, draftCardText(copy, budget, audience, destination), launchDraftButtons(id));
+    }
+    return;
+  }
+
+  // alaunch
+  if (draft.status === "active") {
+    await answerCallback(cb.id, "Уже запущено", true);
+    return;
+  }
+  await answerCallback(cb.id, "⏳ Запускаю…");
+  await admin.from("ad_launches").update({ status: "launching" }).eq("id", id).eq("status", "draft");
+
+  const res = await launchFromDraft(admin, id);
+
+  if (res.notReady) {
+    await admin.from("ad_launches").update({ status: "draft" }).eq("id", id);
+    if (messageId) {
+      await editMessageText(
+        chatId,
+        messageId,
+        "⏳ Видео ещё обрабатывается Meta. Нажми «🚀 Запустить» ещё раз через минуту.",
+        launchDraftButtons(id),
+      );
+    }
+    return;
+  }
+  if (!res.ok) {
+    if (messageId) await editMessageText(chatId, messageId, `❌ Не удалось запустить: ${res.error}`);
+    return;
+  }
+  if (messageId) {
+    await editMessageText(
+      chatId,
+      messageId,
+      `🚀 <b>Реклама запущена на тест!</b>\n\nПошла на модерацию Meta (обычно от нескольких минут до пары часов). Как одобрят — начнёт откручиваться.\n\nОтслеживай результаты в разделе «Реклама» и в «Отчётах».`,
+    );
+  }
+}
 
 /**
  * Определить проект по чату: в личке — по chat_id; в группе — по Telegram-id
@@ -596,6 +816,12 @@ async function handleMessage(admin: Admin, msg: TgMessage) {
     return;
   }
 
+  // Видео-креатив (или видео-файл документом) → черновик автозапуска рекламы
+  if (msg.video || msg.document?.mime_type?.startsWith("video/")) {
+    await handleAdVideo(admin, msg, link);
+    return;
+  }
+
   // «Моя зарплата» — доступно всем, даже посреди оформления продажи
   if (text === "💵 Моя зарплата") {
     const role = await effectiveRole(admin, link.project_id, link.user_id);
@@ -784,6 +1010,12 @@ async function handleCallback(admin: Admin, cb: TgCallback) {
   // Отчёты (личка и группы) — до лид-логики
   if (action === "rep" || action === "repsub" || action === "repset") {
     await handleReportCallback(admin, cb);
+    return;
+  }
+
+  // Автозапуск рекламы: запустить / переписать / отменить
+  if (action === "alaunch" || action === "arewrite" || action === "acancel") {
+    await handleLaunchCallback(admin, cb);
     return;
   }
 

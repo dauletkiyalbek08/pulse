@@ -179,6 +179,96 @@ export async function checkMetaPermissions(
   };
 }
 
+/* ─────────────────── Конфиг автозапуска рекламы (из бота) ─────────────────── */
+
+const SITE_BASE = "https://pulse-drab-chi.vercel.app";
+
+export interface LaunchConfig {
+  country: string;
+  ageMin: number;
+  ageMax: number;
+  gender: string; // all|male|female
+  dailyBudgetUsd: number;
+  destinationUrl: string;
+  pageId: string | null;
+  objective: string; // traffic|leads
+}
+
+/** Текущий конфиг запуска (с дефолтами) + подсказка адреса квиза. */
+export async function getLaunchConfig(
+  projectId: string,
+): Promise<{ config: LaunchConfig; defaultDestination: string }> {
+  const admin = createAdminClient();
+  const [cfgRes, landingRes] = await Promise.all([
+    admin
+      .from("ad_launch_config")
+      .select("country, age_min, age_max, gender, daily_budget_usd, destination_url, page_id, objective")
+      .eq("project_id", projectId)
+      .maybeSingle(),
+    admin
+      .from("landings")
+      .select("slug")
+      .eq("project_id", projectId)
+      .eq("type", "quiz")
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const defaultDestination = landingRes.data?.slug
+    ? `${SITE_BASE}/l/${landingRes.data.slug}`
+    : `${SITE_BASE}/l/quiz`;
+  const c = cfgRes.data;
+  return {
+    config: {
+      country: c?.country ?? "KZ",
+      ageMin: c?.age_min ?? 24,
+      ageMax: c?.age_max ?? 55,
+      gender: c?.gender ?? "all",
+      dailyBudgetUsd: Number(c?.daily_budget_usd ?? 5),
+      destinationUrl: c?.destination_url ?? defaultDestination,
+      pageId: c?.page_id ?? null,
+      objective: c?.objective ?? "traffic",
+    },
+    defaultDestination,
+  };
+}
+
+export async function saveLaunchConfig(
+  projectId: string,
+  input: LaunchConfig,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+
+  const ageMin = Math.max(13, Math.min(65, Math.round(input.ageMin)));
+  const ageMax = Math.max(ageMin, Math.min(65, Math.round(input.ageMax)));
+  const budget = Math.max(1, Number(input.dailyBudgetUsd) || 5);
+  const gender = ["all", "male", "female"].includes(input.gender) ? input.gender : "all";
+  const country = (input.country || "KZ").trim().toUpperCase().slice(0, 2);
+  const destination = (input.destinationUrl || "").trim() || null;
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("ad_launch_config").upsert(
+    {
+      project_id: projectId,
+      country,
+      age_min: ageMin,
+      age_max: ageMax,
+      gender,
+      daily_budget_usd: budget,
+      destination_url: destination,
+      page_id: input.pageId || null,
+      objective: input.objective === "leads" ? "leads" : "traffic",
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "project_id" },
+  );
+  if (error) return { ok: false, error: "Не удалось сохранить настройки запуска" };
+
+  revalidatePath(`/p/${projectId}/ads`);
+  return { ok: true };
+}
+
 /* ───────────────────────── Lead Ads (формы) ───────────────────────── */
 
 export interface LeadPage {

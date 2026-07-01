@@ -11,7 +11,8 @@ import { CampaignsTable, type CampaignRow } from "@/components/campaigns-table";
 import { AdsTabs } from "@/components/ads-tabs";
 import { MetaIntegration } from "@/components/meta-integration";
 import { LeadAdsSetup } from "@/components/lead-ads-setup";
-import { getMetaStatuses, getLeadPages } from "@/app/p/[projectId]/ads/integration-actions";
+import { LaunchConfigCard } from "@/components/launch-config";
+import { getMetaStatuses, getLeadPages, getLaunchConfig } from "@/app/p/[projectId]/ads/integration-actions";
 import { getLiveAds } from "@/lib/ads-live";
 import type { AdLevel } from "@/lib/meta";
 
@@ -39,10 +40,11 @@ export default async function AdsPage({
 
   // Подключённые кабинеты → тянем данные живьём за выбранный период и уровень.
   // Если ничего не подключено — показываем сохранённый демо-снимок (кампании).
-  const [statuses, live, leadPages] = await Promise.all([
+  const [statuses, live, leadPages, launch] = await Promise.all([
     getMetaStatuses(projectId),
     getLiveAds(projectId, level, range.from, range.to),
     getLeadPages(projectId),
+    getLaunchConfig(projectId),
   ]);
 
   let campaigns: CampaignRow[];
@@ -128,6 +130,17 @@ export default async function AdsPage({
         <MetaIntegration projectId={projectId} purpose="course" title="Курс" status={courseStatus} />
         <MetaIntegration projectId={projectId} purpose="vacancy" title="Вакансии" status={vacancyStatus} />
       </div>
+
+      {courseStatus && (
+        <div className="mb-8">
+          <LaunchConfigCard
+            projectId={projectId}
+            config={launch.config}
+            pages={leadPages}
+            defaultDestination={launch.defaultDestination}
+          />
+        </div>
+      )}
 
       <div className="mb-8">
         <LeadAdsSetup

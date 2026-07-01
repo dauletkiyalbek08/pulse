@@ -40,6 +40,31 @@ export function sendMessage(
   });
 }
 
+/**
+ * Прямая ссылка на файл Telegram (для передачи в Meta, которая сама скачает
+ * видео). Ссылка временная и живёт на стороне Telegram; токен только на сервере.
+ */
+export async function getFileUrl(fileId: string): Promise<string | null> {
+  const r = (await tgCall("getFile", { file_id: fileId })) as {
+    ok?: boolean;
+    result?: { file_path?: string };
+  };
+  const path = r?.result?.file_path;
+  if (!path) return null;
+  return `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${path}`;
+}
+
+/** Кнопки черновика автозапуска рекламы. */
+export function launchDraftButtons(id: string): InlineButton[][] {
+  return [
+    [{ text: "🚀 Запустить", callback_data: `alaunch:${id}` }],
+    [
+      { text: "✏️ Переписать текст", callback_data: `arewrite:${id}` },
+      { text: "❌ Отмена", callback_data: `acancel:${id}` },
+    ],
+  ];
+}
+
 export function answerCallback(id: string, text?: string, alert = false) {
   return tgCall("answerCallbackQuery", {
     callback_query_id: id,

@@ -78,6 +78,111 @@ export type Database = {
         }
         Relationships: []
       }
+      ad_launch_config: {
+        Row: {
+          project_id: string
+          country: string
+          age_min: number
+          age_max: number
+          gender: string
+          daily_budget_usd: number
+          destination_url: string | null
+          page_id: string | null
+          objective: string
+          updated_at: string
+        }
+        Insert: {
+          project_id: string
+          country?: string
+          age_min?: number
+          age_max?: number
+          gender?: string
+          daily_budget_usd?: number
+          destination_url?: string | null
+          page_id?: string | null
+          objective?: string
+          updated_at?: string
+        }
+        Update: {
+          project_id?: string
+          country?: string
+          age_min?: number
+          age_max?: number
+          gender?: string
+          daily_budget_usd?: number
+          destination_url?: string | null
+          page_id?: string | null
+          objective?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ad_launches: {
+        Row: {
+          id: string
+          project_id: string
+          created_by: string | null
+          chat_id: number
+          purpose: string
+          tg_file_id: string | null
+          meta_video_id: string | null
+          thumb_url: string | null
+          offer: string | null
+          primary_text: string | null
+          headline: string | null
+          budget_usd: number
+          campaign_id: string | null
+          adset_id: string | null
+          ad_id: string | null
+          status: string
+          error: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          created_by?: string | null
+          chat_id: number
+          purpose?: string
+          tg_file_id?: string | null
+          meta_video_id?: string | null
+          thumb_url?: string | null
+          offer?: string | null
+          primary_text?: string | null
+          headline?: string | null
+          budget_usd?: number
+          campaign_id?: string | null
+          adset_id?: string | null
+          ad_id?: string | null
+          status?: string
+          error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          created_by?: string | null
+          chat_id?: number
+          purpose?: string
+          tg_file_id?: string | null
+          meta_video_id?: string | null
+          thumb_url?: string | null
+          offer?: string | null
+          primary_text?: string | null
+          headline?: string | null
+          budget_usd?: number
+          campaign_id?: string | null
+          adset_id?: string | null
+          ad_id?: string | null
+          status?: string
+          error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ad_spend: {
         Row: {
           amount: number
