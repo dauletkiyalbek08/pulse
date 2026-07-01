@@ -228,12 +228,13 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
     object_story_spec: { page_id: p.pageId, video_data: videoData },
   });
 
-  // 4. Объявление
+  // 4. Объявление. Отключаем показ в блоке с несколькими рекламодателями.
   const ad = await graphPost<{ id: string }>(`act_${acc}/ads`, p.token, {
     name: `${base} · объявление`,
     adset_id: adset.id,
     creative: { creative_id: creative.id },
     status: "PAUSED",
+    is_multi_advertiser_ads_enabled: false,
   });
 
   // 5. Активация (кампания → группа → объявление)
