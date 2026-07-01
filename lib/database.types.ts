@@ -192,6 +192,45 @@ export type Database = {
         }
         Relationships: []
       }
+      ad_launch_media: {
+        Row: {
+          id: string
+          launch_id: string
+          kind: string
+          meta_video_id: string | null
+          image_url: string | null
+          thumb_url: string | null
+          meta_creative_id: string | null
+          meta_ad_id: string | null
+          position: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          launch_id: string
+          kind: string
+          meta_video_id?: string | null
+          image_url?: string | null
+          thumb_url?: string | null
+          meta_creative_id?: string | null
+          meta_ad_id?: string | null
+          position?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          launch_id?: string
+          kind?: string
+          meta_video_id?: string | null
+          image_url?: string | null
+          thumb_url?: string | null
+          meta_creative_id?: string | null
+          meta_ad_id?: string | null
+          position?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
       ad_spend: {
         Row: {
           amount: number

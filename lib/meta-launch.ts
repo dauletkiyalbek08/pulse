@@ -133,12 +133,19 @@ const GENDER_CODE: Record<string, number[] | undefined> = {
   female: [2],
 };
 
+/** Один креатив запуска: видео или картинка-баннер. */
+export interface CreativeInput {
+  kind: "video" | "image";
+  videoId?: string; // для видео (id в Meta)
+  imageUrl?: string; // для картинки (публичный URL)
+  thumbUrl?: string | null; // превью видео
+}
+
 export interface LaunchParams {
   adAccountId: string;
   token: string;
   pageId: string;
-  videoId: string;
-  thumbUrl: string | null;
+  creatives: CreativeInput[]; // несколько объявлений в одной группе (A/B тест)
   headline: string;
   primaryText: string;
   destinationUrl: string;
@@ -178,12 +185,12 @@ export async function findCityKey(
 export interface LaunchIds {
   campaignId: string;
   adsetId: string;
-  adId: string;
+  ads: { creativeId: string; adId: string }[];
 }
 
 /**
- * Полный запуск: создаёт кампанию→группу→креатив→объявление (все на паузе),
- * затем активирует. Возвращает id сущностей.
+ * Полный запуск: одна кампания → одна группа → по объявлению на каждый креатив
+ * (видео и/или картинки), затем активирует. Meta тестит объявления между собой.
  * Цель «leads» + пиксель → оптимизация под заявки (OFFSITE_CONVERSIONS / LEAD).
  * Иначе — трафик на сайт с оптимизацией по кликам (надёжная доставка).
  */
@@ -235,46 +242,61 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
 
   const adset = await graphPost<{ id: string }>(`act_${acc}/adsets`, p.token, adsetParams);
 
-  // 3. Креатив: видео + текст + кнопка на квиз
-  const videoData: Record<string, unknown> = {
-    video_id: p.videoId,
-    title: p.headline,
-    message: p.primaryText,
-    call_to_action: { type: "LEARN_MORE", value: { link: p.destinationUrl } },
-  };
-  if (p.thumbUrl) videoData.image_url = p.thumbUrl;
+  const cta = { type: "LEARN_MORE", value: { link: p.destinationUrl } };
 
-  const objectStorySpec: Record<string, unknown> = { page_id: p.pageId, video_data: videoData };
-  // Identity: показ в Instagram и Threads от связанного IG-профиля.
-  if (p.instagramUserId) objectStorySpec.instagram_user_id = p.instagramUserId;
+  // 3–4. По объявлению на каждый креатив (видео или картинка) в одной группе.
+  const ads: { creativeId: string; adId: string }[] = [];
+  let i = 0;
+  for (const c of p.creatives) {
+    i += 1;
+    const objectStorySpec: Record<string, unknown> = { page_id: p.pageId };
+    if (c.kind === "video") {
+      const videoData: Record<string, unknown> = {
+        video_id: c.videoId,
+        title: p.headline,
+        message: p.primaryText,
+        call_to_action: cta,
+      };
+      if (c.thumbUrl) videoData.image_url = c.thumbUrl;
+      objectStorySpec.video_data = videoData;
+    } else {
+      objectStorySpec.link_data = {
+        link: p.destinationUrl,
+        message: p.primaryText,
+        name: p.headline,
+        picture: c.imageUrl,
+        call_to_action: cta,
+      };
+    }
+    // Identity: показ в Instagram и Threads от связанного IG-профиля.
+    if (p.instagramUserId) objectStorySpec.instagram_user_id = p.instagramUserId;
 
-  const creative = await graphPost<{ id: string }>(`act_${acc}/adcreatives`, p.token, {
-    name: `${base} · креатив`,
-    object_story_spec: objectStorySpec,
-    // Отказ от авто-«расширений браузера» (Позвонить/Messenger/WhatsApp/Форма) —
-    // Meta включает их сама, если не поставить OPT_OUT. Нам нужен только сайт.
-    degrees_of_freedom_spec: {
-      creative_features_spec: {
-        site_extensions: { enroll_status: "OPT_OUT" },
+    const creative = await graphPost<{ id: string }>(`act_${acc}/adcreatives`, p.token, {
+      name: `${base} · креатив ${i}`,
+      object_story_spec: objectStorySpec,
+      // Отказ от авто-«расширений браузера» (Позвонить/Messenger/WhatsApp/Форма).
+      degrees_of_freedom_spec: {
+        creative_features_spec: { site_extensions: { enroll_status: "OPT_OUT" } },
       },
-    },
-  });
+    });
 
-  // 4. Объявление. Отключаем показ в блоке с несколькими рекламодателями.
-  const ad = await graphPost<{ id: string }>(`act_${acc}/ads`, p.token, {
-    name: `${base} · объявление`,
-    adset_id: adset.id,
-    creative: { creative_id: creative.id },
-    status: "PAUSED",
-    is_multi_advertiser_ads_enabled: false,
-  });
+    // Объявление. Отключаем показ в блоке с несколькими рекламодателями.
+    const ad = await graphPost<{ id: string }>(`act_${acc}/ads`, p.token, {
+      name: `${base} · объявление ${i}`,
+      adset_id: adset.id,
+      creative: { creative_id: creative.id },
+      status: "PAUSED",
+      is_multi_advertiser_ads_enabled: false,
+    });
+    ads.push({ creativeId: creative.id, adId: ad.id });
+  }
 
-  // 5. Активация (кампания → группа → объявление)
+  // 5. Активация (кампания → группа → все объявления)
   await graphPost(campaign.id, p.token, { status: "ACTIVE" });
   await graphPost(adset.id, p.token, { status: "ACTIVE" });
-  await graphPost(ad.id, p.token, { status: "ACTIVE" });
+  for (const a of ads) await graphPost(a.adId, p.token, { status: "ACTIVE" });
 
-  return { campaignId: campaign.id, adsetId: adset.id, adId: ad.id };
+  return { campaignId: campaign.id, adsetId: adset.id, ads };
 }
 
 /* ─────────────────────────── Текст от AI ─────────────────────────── */
@@ -345,7 +367,6 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
     .eq("id", launchId)
     .maybeSingle();
   if (!draft) return { ok: false, error: "Черновик не найден" };
-  if (!draft.meta_video_id) return { ok: false, error: "Видео не загружено" };
 
   const { data: integ } = await admin
     .from("meta_integration")
@@ -368,10 +389,41 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
     return { ok: false, error: "Не удалось расшифровать токен кабинета" };
   }
 
-  // Готовность видео
-  const state = await videoState(token, draft.meta_video_id);
-  if (state.failed) return { ok: false, error: "Meta не смогла обработать видео. Пришлите другой файл." };
-  if (!state.ready) return { ok: false, notReady: true, error: "Видео ещё обрабатывается Meta" };
+  // Медиа запуска: несколько креативов (видео/картинки). Back-compat: одиночное meta_video_id.
+  const { data: mediaRows } = await admin
+    .from("ad_launch_media")
+    .select("id, kind, meta_video_id, image_url, thumb_url, position")
+    .eq("launch_id", launchId)
+    .order("position");
+
+  interface MediaItem {
+    id: string | null;
+    kind: "video" | "image";
+    metaVideoId: string | null;
+    imageUrl: string | null;
+    thumbUrl: string | null;
+  }
+  const media: MediaItem[] = (mediaRows ?? []).map((m) => ({
+    id: m.id,
+    kind: m.kind === "image" ? "image" : "video",
+    metaVideoId: m.meta_video_id,
+    imageUrl: m.image_url,
+    thumbUrl: m.thumb_url,
+  }));
+  if (media.length === 0 && draft.meta_video_id) {
+    media.push({ id: null, kind: "video", metaVideoId: draft.meta_video_id, imageUrl: null, thumbUrl: draft.thumb_url });
+  }
+  if (media.length === 0) return { ok: false, error: "Нет креативов для запуска" };
+
+  // Готовность всех видео (картинки готовы сразу)
+  for (const m of media) {
+    if (m.kind === "video" && m.metaVideoId) {
+      const st = await videoState(token, m.metaVideoId);
+      if (st.failed) return { ok: false, error: "Meta не смогла обработать одно из видео. Замените файл." };
+      if (!st.ready) return { ok: false, notReady: true, error: "Видео ещё обрабатывается Meta" };
+      if (!m.thumbUrl) m.thumbUrl = st.thumbUrl;
+    }
+  }
 
   // Конфиг аудитории/бюджета/страницы/цели
   const { data: cfg } = await admin
@@ -438,8 +490,12 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
       adAccountId: integ.ad_account_id,
       token,
       pageId,
-      videoId: draft.meta_video_id,
-      thumbUrl: draft.thumb_url ?? state.thumbUrl,
+      creatives: media.map((m) => ({
+        kind: m.kind,
+        videoId: m.metaVideoId ?? undefined,
+        imageUrl: m.imageUrl ?? undefined,
+        thumbUrl: m.thumbUrl,
+      })),
       headline: draft.headline ?? "Ағылшын тілі курсы",
       primaryText: draft.primary_text ?? "Ағылшын тілін нөлден үйреніңіз.",
       destinationUrl,
@@ -456,19 +512,31 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
       instagramUserId,
     });
 
+    // Сохраняем id объявлений/креативов по каждому медиа (в том же порядке)
+    for (let idx = 0; idx < media.length; idx++) {
+      const m = media[idx];
+      const a = ids.ads[idx];
+      if (m.id && a) {
+        await admin
+          .from("ad_launch_media")
+          .update({ meta_creative_id: a.creativeId, meta_ad_id: a.adId })
+          .eq("id", m.id);
+      }
+    }
+
     await admin
       .from("ad_launches")
       .update({
         status: "active",
         campaign_id: ids.campaignId,
         adset_id: ids.adsetId,
-        ad_id: ids.adId,
+        ad_id: ids.ads[0]?.adId ?? null,
         error: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", launchId);
 
-    return { ok: true, adId: ids.adId, campaignId: ids.campaignId };
+    return { ok: true, adId: ids.ads[0]?.adId, campaignId: ids.campaignId };
   } catch (e) {
     const error = e instanceof Error ? e.message : "Ошибка запуска";
     await admin

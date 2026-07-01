@@ -46,16 +46,23 @@ export interface WebDraftResult {
   primaryText?: string;
 }
 
+export interface MediaItemInput {
+  path: string;
+  kind: "video" | "image";
+}
+
 /**
- * Черновик из загруженного видео: Meta забирает файл по публичному URL хранилища,
- * DeepSeek пишет текст, создаётся ad_launches (без Telegram-чата).
+ * Черновик из загруженных файлов (несколько видео и/или картинок): Meta забирает
+ * каждый по публичному URL, DeepSeek пишет текст. Все креативы — в одном запуске
+ * (одна кампания → одна группа → N объявлений). ad_launches без Telegram-чата.
  */
 export async function createWebDraft(
   projectId: string,
-  storagePath: string,
+  items: MediaItemInput[],
   offer: string,
 ): Promise<WebDraftResult> {
   if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  if (!items || items.length === 0) return { ok: false, error: "Не выбрано ни одного файла" };
 
   const supabase = await createClient();
   const {
@@ -72,17 +79,32 @@ export async function createWebDraft(
     .maybeSingle();
   if (!integ) return { ok: false, error: "Сначала подключите кабинет Meta" };
 
-  const { data: pub } = admin.storage.from(BUCKET).getPublicUrl(storagePath);
-  const publicUrl = pub?.publicUrl;
-  if (!publicUrl) return { ok: false, error: "Видео не найдено в хранилище" };
+  const token = decryptSecret(integ.token_enc);
 
-  let metaVideoId: string;
+  // Загрузка каждого медиа: видео → в Meta (video_id); картинка → публичный URL
+  const mediaToInsert: {
+    kind: "video" | "image";
+    meta_video_id: string | null;
+    image_url: string | null;
+    position: number;
+  }[] = [];
   try {
-    const token = decryptSecret(integ.token_enc);
-    metaVideoId = await uploadAdVideo(integ.ad_account_id, token, publicUrl, "Pulse авто (сайт)");
+    let pos = 0;
+    for (const item of items) {
+      const { data: pub } = admin.storage.from(BUCKET).getPublicUrl(item.path);
+      const publicUrl = pub?.publicUrl;
+      if (!publicUrl) continue;
+      if (item.kind === "video") {
+        const vid = await uploadAdVideo(integ.ad_account_id, token, publicUrl, "Pulse авто (сайт)");
+        mediaToInsert.push({ kind: "video", meta_video_id: vid, image_url: null, position: pos++ });
+      } else {
+        mediaToInsert.push({ kind: "image", meta_video_id: null, image_url: publicUrl, position: pos++ });
+      }
+    }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Meta не приняла видео" };
+    return { ok: false, error: e instanceof Error ? e.message : "Meta не приняла один из файлов" };
   }
+  if (mediaToInsert.length === 0) return { ok: false, error: "Файлы не найдены в хранилище" };
 
   const [copy, cfgRes] = await Promise.all([
     generateAdCopy(projectId, offer),
@@ -97,7 +119,6 @@ export async function createWebDraft(
       created_by: user.id,
       chat_id: null,
       purpose: "course",
-      meta_video_id: metaVideoId,
       offer: offer || null,
       primary_text: copy.primaryText,
       headline: copy.headline,
@@ -107,6 +128,11 @@ export async function createWebDraft(
     .select("id")
     .maybeSingle();
   if (error || !draft) return { ok: false, error: "Не удалось сохранить черновик" };
+
+  const { error: mErr } = await admin
+    .from("ad_launch_media")
+    .insert(mediaToInsert.map((m) => ({ ...m, launch_id: draft.id })));
+  if (mErr) return { ok: false, error: "Не удалось сохранить креативы" };
 
   return { ok: true, draftId: draft.id, headline: copy.headline, primaryText: copy.primaryText };
 }

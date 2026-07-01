@@ -41,39 +41,45 @@ export function WebLaunch({ projectId, defaultBudget }: { projectId: string; def
   const input =
     "w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-brand focus:outline-none";
 
-  async function submitVideo() {
+  async function submitFiles() {
     setErr(null);
-    const file = fileRef.current?.files?.[0];
-    if (!file) {
-      setErr("Выберите видео (MP4/MOV).");
+    const files = Array.from(fileRef.current?.files ?? []);
+    if (files.length === 0) {
+      setErr("Выберите видео и/или картинки.");
       return;
     }
-    if (!file.type.startsWith("video/")) {
-      setErr("Это не видеофайл.");
+    const bad = files.find((f) => !f.type.startsWith("video/") && !f.type.startsWith("image/"));
+    if (bad) {
+      setErr(`«${bad.name}» — не видео и не картинка.`);
       return;
     }
     setPhase("uploading");
     setProgress(0);
 
-    // 1. Подписанный URL и прямая загрузка в хранилище
-    const ticket = await createAdVideoUploadUrl(projectId, file.name);
-    if (!ticket.ok || !ticket.path || !ticket.token) {
-      setErr(ticket.error ?? "Ошибка загрузки");
-      setPhase("idle");
-      return;
-    }
+    // 1. Загрузка каждого файла напрямую в хранилище по подписанной ссылке
     const supabase = createClient();
-    const up = await supabase.storage.from("ad-videos").uploadToSignedUrl(ticket.path, ticket.token, file);
-    if (up.error) {
-      setErr("Не удалось загрузить видео. Проверьте размер (до 500 МБ) и интернет.");
-      setPhase("idle");
-      return;
+    const items: { path: string; kind: "video" | "image" }[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const ticket = await createAdVideoUploadUrl(projectId, file.name);
+      if (!ticket.ok || !ticket.path || !ticket.token) {
+        setErr(ticket.error ?? "Ошибка загрузки");
+        setPhase("idle");
+        return;
+      }
+      const up = await supabase.storage.from("ad-videos").uploadToSignedUrl(ticket.path, ticket.token, file);
+      if (up.error) {
+        setErr(`Не удалось загрузить «${file.name}». Проверьте размер (до 500 МБ) и интернет.`);
+        setPhase("idle");
+        return;
+      }
+      items.push({ path: ticket.path, kind: file.type.startsWith("video/") ? "video" : "image" });
+      setProgress(Math.round(((i + 1) / files.length) * 100));
     }
-    setProgress(100);
 
-    // 2. Черновик: Meta забирает видео + AI-текст
+    // 2. Черновик: Meta забирает файлы + AI-текст
     setPhase("processing");
-    const res = await createWebDraft(projectId, ticket.path, offer);
+    const res = await createWebDraft(projectId, items, offer);
     if (!res.ok || !res.draftId) {
       setErr(res.error ?? "Не удалось создать черновик");
       setPhase("idle");
@@ -137,8 +143,8 @@ export function WebLaunch({ projectId, defaultBudget }: { projectId: string; def
           <Clapperboard className="h-5 w-5" />
         </span>
         <div>
-          <div className="text-sm font-semibold text-ink">Запуск с загрузкой видео</div>
-          <div className="text-xs text-muted">Тяжёлые ролики (HD/4K) — без лимита Telegram, до 500 МБ</div>
+          <div className="text-sm font-semibold text-ink">Запуск с загрузкой креативов</div>
+          <div className="text-xs text-muted">Несколько видео и/или картинок в одну кампанию · до 500 МБ каждый</div>
         </div>
       </div>
 
@@ -210,18 +216,19 @@ export function WebLaunch({ projectId, defaultBudget }: { projectId: string; def
         </div>
       ) : (
         <div className="space-y-3">
-          <input ref={fileRef} type="file" accept="video/*" className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-brand-soft file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-ink" />
+          <input ref={fileRef} type="file" multiple accept="video/*,image/*" className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-brand-soft file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-ink" />
+          <p className="text-xs text-faint">Можно выбрать несколько файлов сразу (видео MP4/MOV и картинки JPG/PNG). Meta протестит их между собой на один бюджет.</p>
           <textarea
             value={offer}
             onChange={(e) => setOffer(e.target.value)}
             rows={2}
-            placeholder="Оффер / о чём ролик (например: Ағылшын тілі курсы — топтық сабақ). AI напишет текст."
+            placeholder="Оффер / о чём реклама (например: Ағылшын тілі курсы — топтық сабақ). AI напишет текст."
             className={input}
           />
           {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{err}</p>}
           <button
             type="button"
-            onClick={submitVideo}
+            onClick={submitFiles}
             disabled={phase === "uploading" || phase === "processing"}
             className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-60"
           >
