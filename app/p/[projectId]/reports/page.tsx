@@ -5,7 +5,7 @@ import { getNiche } from "@/lib/niches";
 import { roleLabel } from "@/lib/members";
 import { sourceLabel } from "@/lib/leads";
 import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
-import { formatCurrency, formatCurrencyShort, formatNumber, formatPercent } from "@/lib/format";
+import { formatCurrency, formatCurrencyShort, formatNumber, formatPercent, formatUsd } from "@/lib/format";
 import { getCohortFunnel } from "@/lib/funnel";
 import { getLiveAds } from "@/lib/ads-live";
 import { getDailyAdReport } from "@/lib/ads-daily";
@@ -72,8 +72,8 @@ export default async function ReportsPage({
     ]);
 
   const usdRate = Number(proj?.usd_rate ?? 500);
-  // Ежедневный отчёт по рекламе (РНП) — дневная разбивка из Meta в ₸.
-  const daily = await getDailyAdReport(projectId, range.from, range.to, usdRate);
+  // Ежедневный отчёт по рекламе (РНП) — дневная разбивка из Meta в долларах.
+  const daily = await getDailyAdReport(projectId, range.from, range.to);
   const leadsArr = leads ?? [];
   const salesArr = sales ?? [];
   const trialsArr = trials ?? [];
@@ -212,22 +212,22 @@ export default async function ReportsPage({
           <div>
             <h2 className="text-base font-semibold text-ink">Ежедневный отчёт по рекламе (РНП)</h2>
             <p className="mt-0.5 text-xs text-faint">
-              По дням из Meta · расход в ₸ (курс {usdRate} ₸/$) · CPM — цена за 1000 показов
+              По дням из Meta · суммы в долларах ($) · CPM — цена за 1000 показов
             </p>
           </div>
           <ExportButton
             filename={`rnp-${range.from}_${range.to}`}
-            headers={["Дата", "Расход ₸", "Показы", "CPM ₸", "Клики", "CTR %", "CPC ₸", "Лиды", "CPL ₸"]}
+            headers={["Дата", "Расход $", "Показы", "CPM $", "Клики", "CTR %", "CPC $", "Лиды", "CPL $"]}
             rows={daily.rows.map((r) => [
               r.date,
-              Math.round(r.spendKzt),
+              r.spendUsd.toFixed(2),
               r.impressions,
-              r.cpm != null ? Math.round(r.cpm) : "",
+              r.cpm != null ? r.cpm.toFixed(2) : "",
               r.clicks,
               r.ctr != null ? r.ctr.toFixed(2) : "",
-              r.cpc != null ? Math.round(r.cpc) : "",
+              r.cpc != null ? r.cpc.toFixed(2) : "",
               r.leads,
-              r.cpl != null ? Math.round(r.cpl) : "",
+              r.cpl != null ? r.cpl.toFixed(2) : "",
             ])}
             label="Скачать РНП"
           />
@@ -246,25 +246,25 @@ export default async function ReportsPage({
           ]}
           rows={daily.rows.map((r) => [
             r.date.split("-").reverse().join("."),
-            formatCurrency(r.spendKzt),
+            formatUsd(r.spendUsd, 2),
             formatNumber(r.impressions),
-            r.cpm != null ? formatCurrency(r.cpm) : "—",
+            r.cpm != null ? formatUsd(r.cpm, 2) : "—",
             formatNumber(r.clicks),
             r.ctr != null ? `${r.ctr.toFixed(2)}%` : "—",
-            r.cpc != null ? formatCurrency(r.cpc) : "—",
+            r.cpc != null ? formatUsd(r.cpc, 2) : "—",
             formatNumber(r.leads),
-            r.cpl != null ? formatCurrency(r.cpl) : "—",
+            r.cpl != null ? formatUsd(r.cpl, 2) : "—",
           ])}
           total={[
             "Итого",
-            formatCurrency(daily.totals.spendKzt),
+            formatUsd(daily.totals.spendUsd, 2),
             formatNumber(daily.totals.impressions),
-            daily.totals.cpm != null ? formatCurrency(daily.totals.cpm) : "—",
+            daily.totals.cpm != null ? formatUsd(daily.totals.cpm, 2) : "—",
             formatNumber(daily.totals.clicks),
             daily.totals.ctr != null ? `${daily.totals.ctr.toFixed(2)}%` : "—",
-            daily.totals.cpc != null ? formatCurrency(daily.totals.cpc) : "—",
+            daily.totals.cpc != null ? formatUsd(daily.totals.cpc, 2) : "—",
             formatNumber(daily.totals.leads),
-            daily.totals.cpl != null ? formatCurrency(daily.totals.cpl) : "—",
+            daily.totals.cpl != null ? formatUsd(daily.totals.cpl, 2) : "—",
           ]}
           empty={
             daily.connected

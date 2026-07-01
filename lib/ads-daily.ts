@@ -1,7 +1,8 @@
 /**
  * Ежедневный отчёт по рекламе (РНП) для таргетолога — по дням за период.
  * Тянет дневную разбивку из Meta, оставляет только «курс», агрегирует по дате
- * и считает производные (CPL, CPM, CPC, CTR) в тенге. Server-only.
+ * и считает производные (CPL, CPM, CPC, CTR). Суммы — в долларах (валюта
+ * кабинета Meta), как привык таргетолог. Server-only.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptSecret } from "@/lib/crypto";
@@ -9,14 +10,14 @@ import { fetchMetaDaily, guessObjective } from "@/lib/meta";
 
 export interface DailyAdRow {
   date: string; // YYYY-MM-DD
-  spendKzt: number;
+  spendUsd: number;
   impressions: number;
   clicks: number;
   reach: number;
   leads: number;
-  cpl: number | null; // ₸ за лид
-  cpm: number | null; // ₸ за 1000 показов
-  cpc: number | null; // ₸ за клик
+  cpl: number | null; // $ за лид
+  cpm: number | null; // $ за 1000 показов
+  cpc: number | null; // $ за клик
   ctr: number | null; // %
 }
 
@@ -35,16 +36,16 @@ interface Agg {
   leads: number;
 }
 
-function derive(spendKzt: number, a: Agg): Omit<DailyAdRow, "date"> {
+function derive(spendUsd: number, a: Agg): Omit<DailyAdRow, "date"> {
   return {
-    spendKzt,
+    spendUsd,
     impressions: a.impressions,
     clicks: a.clicks,
     reach: a.reach,
     leads: a.leads,
-    cpl: a.leads > 0 ? spendKzt / a.leads : null,
-    cpm: a.impressions > 0 ? (spendKzt / a.impressions) * 1000 : null,
-    cpc: a.clicks > 0 ? spendKzt / a.clicks : null,
+    cpl: a.leads > 0 ? spendUsd / a.leads : null,
+    cpm: a.impressions > 0 ? (spendUsd / a.impressions) * 1000 : null,
+    cpc: a.clicks > 0 ? spendUsd / a.clicks : null,
     ctr: a.impressions > 0 ? (a.clicks / a.impressions) * 100 : null,
   };
 }
@@ -53,7 +54,6 @@ export async function getDailyAdReport(
   projectId: string,
   since: string,
   until: string,
-  usdRate: number,
 ): Promise<DailyAdReport> {
   const admin = createAdminClient();
   const { data: integs } = await admin
@@ -96,7 +96,7 @@ export async function getDailyAdReport(
   }
 
   const rows: DailyAdRow[] = [...byDate.entries()]
-    .map(([date, a]) => ({ date, ...derive(a.spend * usdRate, a) }))
+    .map(([date, a]) => ({ date, ...derive(a.spend, a) }))
     .sort((x, y) => (x.date < y.date ? 1 : -1));
 
   const sum: Agg = { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0 };
@@ -111,7 +111,7 @@ export async function getDailyAdReport(
   return {
     connected: true,
     rows,
-    totals: derive(sum.spend * usdRate, sum),
+    totals: derive(sum.spend, sum),
     errors,
   };
 }
