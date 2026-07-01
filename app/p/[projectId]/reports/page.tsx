@@ -8,6 +8,7 @@ import { rangeFromSearchParams, rangeEndExclusive } from "@/lib/date-range";
 import { formatCurrency, formatCurrencyShort, formatNumber, formatPercent } from "@/lib/format";
 import { getCohortFunnel } from "@/lib/funnel";
 import { getLiveAds } from "@/lib/ads-live";
+import { getDailyAdReport } from "@/lib/ads-daily";
 import { PageHeader } from "@/components/page-header";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { MetricCard } from "@/components/metric-card";
@@ -71,6 +72,8 @@ export default async function ReportsPage({
     ]);
 
   const usdRate = Number(proj?.usd_rate ?? 500);
+  // Ежедневный отчёт по рекламе (РНП) — дневная разбивка из Meta в ₸.
+  const daily = await getDailyAdReport(projectId, range.from, range.to, usdRate);
   const leadsArr = leads ?? [];
   const salesArr = sales ?? [];
   const trialsArr = trials ?? [];
@@ -201,6 +204,74 @@ export default async function ReportsPage({
         <MetricCard label="Конверсия в продажу" value={formatPercent(pct(salesCount, leadsCount))} icon={Percent} />
         <MetricCard label="ROAS" value={roas != null ? `${roas.toFixed(1).replace(".", ",")}x` : "—"} icon={TrendingUp} />
         <MetricCard label="Средний чек" value={salesCount > 0 ? formatCurrencyShort(avgCheck) : "—"} icon={Tag} />
+      </div>
+
+      {/* Ежедневный отчёт по рекламе (РНП) — для таргетолога: по дням за период */}
+      <div className="mt-6">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Ежедневный отчёт по рекламе (РНП)</h2>
+            <p className="mt-0.5 text-xs text-faint">
+              По дням из Meta · расход в ₸ (курс {usdRate} ₸/$) · CPM — цена за 1000 показов
+            </p>
+          </div>
+          <ExportButton
+            filename={`rnp-${range.from}_${range.to}`}
+            headers={["Дата", "Расход ₸", "Показы", "CPM ₸", "Клики", "CTR %", "CPC ₸", "Лиды", "CPL ₸"]}
+            rows={daily.rows.map((r) => [
+              r.date,
+              Math.round(r.spendKzt),
+              r.impressions,
+              r.cpm != null ? Math.round(r.cpm) : "",
+              r.clicks,
+              r.ctr != null ? r.ctr.toFixed(2) : "",
+              r.cpc != null ? Math.round(r.cpc) : "",
+              r.leads,
+              r.cpl != null ? Math.round(r.cpl) : "",
+            ])}
+            label="Скачать РНП"
+          />
+        </div>
+        <ReportTable
+          columns={[
+            { label: "Дата" },
+            { label: "Расход" },
+            { label: "Показы" },
+            { label: "CPM" },
+            { label: "Клики" },
+            { label: "CTR" },
+            { label: "CPC" },
+            { label: "Лиды" },
+            { label: "CPL" },
+          ]}
+          rows={daily.rows.map((r) => [
+            r.date.split("-").reverse().join("."),
+            formatCurrency(r.spendKzt),
+            formatNumber(r.impressions),
+            r.cpm != null ? formatCurrency(r.cpm) : "—",
+            formatNumber(r.clicks),
+            r.ctr != null ? `${r.ctr.toFixed(2)}%` : "—",
+            r.cpc != null ? formatCurrency(r.cpc) : "—",
+            formatNumber(r.leads),
+            r.cpl != null ? formatCurrency(r.cpl) : "—",
+          ])}
+          total={[
+            "Итого",
+            formatCurrency(daily.totals.spendKzt),
+            formatNumber(daily.totals.impressions),
+            daily.totals.cpm != null ? formatCurrency(daily.totals.cpm) : "—",
+            formatNumber(daily.totals.clicks),
+            daily.totals.ctr != null ? `${daily.totals.ctr.toFixed(2)}%` : "—",
+            daily.totals.cpc != null ? formatCurrency(daily.totals.cpc) : "—",
+            formatNumber(daily.totals.leads),
+            daily.totals.cpl != null ? formatCurrency(daily.totals.cpl) : "—",
+          ]}
+          empty={
+            daily.connected
+              ? "Нет показов за выбранный период."
+              : "Meta-кабинет не подключён — подключите в разделе «Реклама», и отчёт заполнится сам."
+          }
+        />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">

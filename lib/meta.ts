@@ -119,6 +119,61 @@ export async function fetchMetaInsights(
   return rows;
 }
 
+export interface MetaDayFull {
+  date: string; // YYYY-MM-DD
+  campaign: string;
+  spend: number; // валюта кабинета
+  impressions: number;
+  clicks: number;
+  reach: number;
+  leads: number;
+}
+
+/**
+ * Дневная разбивка по кампаниям с показами/кликами/охватом/лидами —
+ * для ежедневного отчёта таргетолога (РНП). time_increment=1 → строка на день.
+ */
+export async function fetchMetaDaily(
+  adAccountId: string,
+  token: string,
+  since: string,
+  until: string,
+): Promise<MetaDayFull[]> {
+  const id = accountNumber(adAccountId);
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+  let url =
+    `${GRAPH}/act_${id}/insights` +
+    `?level=campaign&fields=campaign_name,spend,impressions,inline_link_clicks,reach,actions` +
+    `&time_increment=1&time_range=${timeRange}&limit=300` +
+    `&access_token=${encodeURIComponent(token)}`;
+
+  const rows: MetaDayFull[] = [];
+  for (let page = 0; page < 50 && url; page++) {
+    const res = await fetch(url, { cache: "no-store" });
+    const json = (await res.json()) as {
+      data?: (InsightsRow & { impressions?: string; inline_link_clicks?: string; reach?: string })[];
+      paging?: { next?: string };
+      error?: { message?: string };
+    };
+    if (!res.ok || json.error) {
+      throw new Error(json.error?.message ?? "Ошибка запроса к Meta Insights");
+    }
+    for (const r of json.data ?? []) {
+      rows.push({
+        date: r.date_start,
+        campaign: r.campaign_name ?? "Meta кампания",
+        spend: Number(r.spend || 0),
+        impressions: Number(r.impressions || 0),
+        clicks: Number(r.inline_link_clicks || 0),
+        reach: Number(r.reach || 0),
+        leads: pickLeads(r.actions),
+      });
+    }
+    url = json.paging?.next ?? "";
+  }
+  return rows;
+}
+
 /** Эвристика цели кампании по названию: вакансии vs курс.
  * `va+c` ловит и «vac», и растянутые «vaaaac»/«vaaac» (так владелец называет вакансии). */
 export function guessObjective(campaign: string): "course" | "vacancy" {
