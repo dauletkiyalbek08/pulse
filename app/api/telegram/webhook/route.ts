@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineMeters } from "@/lib/geo";
 import { reassignLead } from "@/lib/lead-dispatch";
@@ -636,7 +637,7 @@ async function addCollectMedia(
     try {
       const resp = await fetch(url);
       const buf = Buffer.from(await resp.arrayBuffer());
-      const path = `${link.project_id}/${Date.now()}-tg.${imageExt}`;
+      const path = `${link.project_id}/${randomUUID()}.${imageExt}`;
       const up = await admin.storage.from("ad-videos").upload(path, buf, { contentType: imageMime });
       if (up.error) throw new Error("storage");
       const { data: pub } = admin.storage.from("ad-videos").getPublicUrl(path);

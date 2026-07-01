@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -30,7 +31,7 @@ export async function createAdVideoUploadUrl(
   if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
 
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60) || "video.mp4";
-  const path = `${projectId}/${Date.now()}-${safe}`;
+  const path = `${projectId}/${randomUUID()}-${safe}`;
 
   const admin = createAdminClient();
   const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(path);
