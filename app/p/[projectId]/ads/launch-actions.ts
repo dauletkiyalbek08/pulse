@@ -6,7 +6,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEffectiveRole } from "@/lib/queries";
 import { decryptSecret } from "@/lib/crypto";
-import { uploadAdVideo, generateAdCopy, launchFromDraft } from "@/lib/meta-launch";
+import {
+  uploadAdVideo,
+  generateAdCopy,
+  launchFromDraft,
+  updateAdSetBudget,
+  pauseCampaign,
+} from "@/lib/meta-launch";
+import { fetchCampaignInsights } from "@/lib/meta";
+import { almatyYmd } from "@/lib/reports-tg";
 
 const MANAGE_ROLES = ["owner", "director", "marketer", "targetologist"];
 const BUCKET = "ad-videos";
@@ -187,6 +195,149 @@ export interface WebLaunchOutcome {
   ok: boolean;
   error?: string;
   notReady?: boolean;
+}
+
+/* ─────────────── Запущенные кампании: список + анализ + действия ─────────────── */
+
+export interface LaunchedCampaign {
+  id: string;
+  headline: string;
+  createdAt: string;
+  status: string; // active | paused
+  budgetUsd: number;
+  spend: number;
+  leads: number;
+  cpl: number;
+  verdict: "good" | "ok" | "bad" | "early";
+  canScale: boolean;
+}
+
+const GOOD_CPL = 3;
+const BAD_CPL = 5;
+
+/** Список запущенных авто-кампаний проекта с живыми расход/лиды/CPL из Meta. */
+export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedCampaign[]> {
+  if (!(await canManage(projectId))) return [];
+  const admin = createAdminClient();
+  const { data: rows } = await admin
+    .from("ad_launches")
+    .select("id, headline, created_at, status, budget_usd, campaign_id, adset_id, purpose")
+    .eq("project_id", projectId)
+    .in("status", ["active", "paused"])
+    .not("campaign_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (!rows || rows.length === 0) return [];
+
+  const tokens = new Map<string, string | null>();
+  async function tok(purpose: string): Promise<string | null> {
+    if (tokens.has(purpose)) return tokens.get(purpose) ?? null;
+    const { data } = await admin
+      .from("meta_integration")
+      .select("token_enc")
+      .eq("project_id", projectId)
+      .eq("purpose", purpose)
+      .maybeSingle();
+    let t: string | null = null;
+    try {
+      t = data?.token_enc ? decryptSecret(data.token_enc) : null;
+    } catch {
+      t = null;
+    }
+    tokens.set(purpose, t);
+    return t;
+  }
+
+  const until = almatyYmd();
+  const out: LaunchedCampaign[] = [];
+  for (const r of rows) {
+    const token = await tok(r.purpose);
+    let spend = 0;
+    let leads = 0;
+    if (token && r.campaign_id) {
+      try {
+        const s = await fetchCampaignInsights(token, r.campaign_id, String(r.created_at).slice(0, 10), until);
+        spend = s.spend;
+        leads = s.leads;
+      } catch {
+        // статистика не критична — покажем 0
+      }
+    }
+    const cpl = leads > 0 ? spend / leads : 0;
+    let verdict: LaunchedCampaign["verdict"] = "ok";
+    if (spend < 3) verdict = "early";
+    else if (leads === 0 && spend >= 5) verdict = "bad";
+    else if (leads > 0 && cpl <= GOOD_CPL) verdict = "good";
+    else if (leads > 0 && cpl > BAD_CPL) verdict = "bad";
+    out.push({
+      id: r.id,
+      headline: r.headline ?? "Авто-кампания",
+      createdAt: r.created_at,
+      status: r.status,
+      budgetUsd: Number(r.budget_usd),
+      spend,
+      leads,
+      cpl,
+      verdict,
+      canScale: r.status === "active" && !!r.adset_id,
+    });
+  }
+  return out;
+}
+
+export async function raiseLaunchBudget(projectId: string, launchId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  const admin = createAdminClient();
+  const { data: l } = await admin
+    .from("ad_launches")
+    .select("adset_id, purpose, budget_usd")
+    .eq("id", launchId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (!l?.adset_id) return { ok: false, error: "Нет группы объявлений" };
+  const { data: integ } = await admin
+    .from("meta_integration")
+    .select("token_enc")
+    .eq("project_id", projectId)
+    .eq("purpose", l.purpose)
+    .maybeSingle();
+  if (!integ) return { ok: false, error: "Кабинет не подключён" };
+  const newBudget = Math.round(Number(l.budget_usd ?? 3) * 1.5 * 100) / 100;
+  try {
+    await updateAdSetBudget(decryptSecret(integ.token_enc), l.adset_id, Math.round(newBudget * 100));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Meta отклонила изменение" };
+  }
+  await admin.from("ad_launches").update({ budget_usd: newBudget, raise_suggested: false }).eq("id", launchId);
+  revalidatePath(`/p/${projectId}/ads`);
+  return { ok: true };
+}
+
+export async function stopLaunch(projectId: string, launchId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  const admin = createAdminClient();
+  const { data: l } = await admin
+    .from("ad_launches")
+    .select("campaign_id, purpose")
+    .eq("id", launchId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (!l?.campaign_id) return { ok: false, error: "Кампания не найдена" };
+  const { data: integ } = await admin
+    .from("meta_integration")
+    .select("token_enc")
+    .eq("project_id", projectId)
+    .eq("purpose", l.purpose)
+    .maybeSingle();
+  if (!integ) return { ok: false, error: "Кабинет не подключён" };
+  try {
+    await pauseCampaign(decryptSecret(integ.token_enc), l.campaign_id);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Meta отклонила" };
+  }
+  await admin.from("ad_launches").update({ status: "paused" }).eq("id", launchId);
+  revalidatePath(`/p/${projectId}/ads`);
+  return { ok: true };
 }
 
 export async function launchWebDraft(

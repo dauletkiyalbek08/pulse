@@ -14,7 +14,9 @@ import { LeadAdsSetup } from "@/components/lead-ads-setup";
 import { LaunchConfigCard } from "@/components/launch-config";
 import { WebLaunch } from "@/components/web-launch";
 import { AdsSectionTabs } from "@/components/ads-section-tabs";
+import { LaunchedCampaigns } from "@/components/launched-campaigns";
 import { getMetaStatuses, getLeadPages, getLaunchConfig } from "@/app/p/[projectId]/ads/integration-actions";
+import { getLaunchedCampaigns } from "@/app/p/[projectId]/ads/launch-actions";
 import { getLiveAds } from "@/lib/ads-live";
 import type { AdLevel } from "@/lib/meta";
 
@@ -64,6 +66,8 @@ export default async function AdsPage({
 
   const courseStatus = statuses.find((s) => s.purpose === "course") ?? null;
   const vacancyStatus = statuses.find((s) => s.purpose === "vacancy") ?? null;
+
+  const launchedCampaigns = tab === "launch" ? await getLaunchedCampaigns(projectId) : [];
 
   const courseCampaigns = campaigns.filter((c) => c.objective === "course");
   const totalSpend = campaigns.reduce((s, c) => s + Number(c.spend), 0);
@@ -160,14 +164,17 @@ export default async function AdsPage({
       {/* ─────────────── Запуск рекламы ─────────────── */}
       {tab === "launch" && (
         courseStatus ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <LaunchConfigCard
-              projectId={projectId}
-              config={launch.config}
-              pages={leadPages}
-              defaultDestination={launch.defaultDestination}
-            />
-            <WebLaunch projectId={projectId} defaultBudget={launch.config.dailyBudgetUsd} />
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <LaunchConfigCard
+                projectId={projectId}
+                config={launch.config}
+                pages={leadPages}
+                defaultDestination={launch.defaultDestination}
+              />
+              <WebLaunch projectId={projectId} defaultBudget={launch.config.dailyBudgetUsd} />
+            </div>
+            <LaunchedCampaigns projectId={projectId} campaigns={launchedCampaigns} />
           </div>
         ) : (
           <div className="rounded-card border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">
