@@ -118,6 +118,13 @@ export function LaunchConfigCard({
             ))}
           </select>
         </label>
+        <label className="flex flex-col gap-1 text-xs text-muted sm:col-span-2">
+          Цель кампании
+          <select value={c.objective} onChange={(e) => set({ objective: e.target.value })} className={input}>
+            <option value="leads">Лиды — оптимизация под заявки (пиксель)</option>
+            <option value="traffic">Трафик — оптимизация по кликам</option>
+          </select>
+        </label>
       </div>
 
       <label className="mt-3 flex flex-col gap-1 text-xs text-muted">

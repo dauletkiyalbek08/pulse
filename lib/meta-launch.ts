@@ -128,6 +128,8 @@ export interface LaunchParams {
   gender: string; // all|male|female
   dailyBudgetMinor: number; // в минорных единицах валюты кабинета (центы для USD)
   namePrefix: string;
+  objective: string; // traffic|leads
+  pixelId: string | null; // нужен для оптимизации под заявки (leads)
 }
 
 export interface LaunchIds {
@@ -138,23 +140,25 @@ export interface LaunchIds {
 
 /**
  * Полный запуск: создаёт кампанию→группу→креатив→объявление (все на паузе),
- * затем активирует. Возвращает id сущностей. Цель — трафик на квиз,
- * оптимизация по кликам (надёжная доставка для тестового бюджета).
+ * затем активирует. Возвращает id сущностей.
+ * Цель «leads» + пиксель → оптимизация под заявки (OFFSITE_CONVERSIONS / LEAD).
+ * Иначе — трафик на сайт с оптимизацией по кликам (надёжная доставка).
  */
 export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
   const acc = accountNumber(p.adAccountId);
   const stamp = new Date().toISOString().slice(5, 16).replace("T", " ");
   const base = `${p.namePrefix} · ${stamp}`;
+  const leadMode = p.objective === "leads" && !!p.pixelId;
 
-  // 1. Кампания (ODAX: трафик)
+  // 1. Кампания (ODAX): лиды или трафик
   const campaign = await graphPost<{ id: string }>(`act_${acc}/campaigns`, p.token, {
     name: `${base} · кампания`,
-    objective: "OUTCOME_TRAFFIC",
+    objective: leadMode ? "OUTCOME_LEADS" : "OUTCOME_TRAFFIC",
     status: "PAUSED",
     special_ad_categories: [],
   });
 
-  // 2. Группа объявлений: бюджет + аудитория
+  // 2. Группа объявлений: бюджет + аудитория + цель оптимизации
   const targeting: Record<string, unknown> = {
     geo_locations: { countries: [p.country] },
     age_min: p.ageMin,
@@ -163,16 +167,24 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
   const genders = GENDER_CODE[p.gender];
   if (genders) targeting.genders = genders;
 
-  const adset = await graphPost<{ id: string }>(`act_${acc}/adsets`, p.token, {
+  const adsetParams: Record<string, unknown> = {
     name: `${base} · группа`,
     campaign_id: campaign.id,
     daily_budget: String(p.dailyBudgetMinor),
     billing_event: "IMPRESSIONS",
-    optimization_goal: "LINK_CLICKS",
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
     targeting,
     status: "PAUSED",
-  });
+  };
+  if (leadMode) {
+    // Оптимизация под заявки на сайте (событие Lead пикселя)
+    adsetParams.optimization_goal = "OFFSITE_CONVERSIONS";
+    adsetParams.promoted_object = { pixel_id: p.pixelId, custom_event_type: "LEAD" };
+  } else {
+    adsetParams.optimization_goal = "LINK_CLICKS";
+  }
+
+  const adset = await graphPost<{ id: string }>(`act_${acc}/adsets`, p.token, adsetParams);
 
   // 3. Креатив: видео + текст + кнопка на квиз
   const videoData: Record<string, unknown> = {
@@ -297,11 +309,21 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
   if (state.failed) return { ok: false, error: "Meta не смогла обработать видео. Пришлите другой файл." };
   if (!state.ready) return { ok: false, notReady: true, error: "Видео ещё обрабатывается Meta" };
 
-  // Конфиг аудитории/бюджета/страницы
+  // Конфиг аудитории/бюджета/страницы/цели
   const { data: cfg } = await admin
     .from("ad_launch_config")
-    .select("country, age_min, age_max, gender, daily_budget_usd, destination_url, page_id")
+    .select("country, age_min, age_max, gender, daily_budget_usd, destination_url, page_id, objective")
     .eq("project_id", draft.project_id)
+    .maybeSingle();
+
+  // Квиз проекта: адрес назначения + пиксель (для оптимизации под заявки)
+  const { data: landing } = await admin
+    .from("landings")
+    .select("slug, pixel_id")
+    .eq("project_id", draft.project_id)
+    .eq("type", "quiz")
+    .eq("status", "active")
+    .limit(1)
     .maybeSingle();
 
   // Страница: из конфига или первая привязанная
@@ -323,20 +345,11 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
   }
 
   // Куда ведём: из конфига или квиз проекта
-  let destinationUrl = cfg?.destination_url ?? null;
-  if (!destinationUrl) {
-    const { data: landing } = await admin
-      .from("landings")
-      .select("slug")
-      .eq("project_id", draft.project_id)
-      .eq("type", "quiz")
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle();
-    destinationUrl = landing?.slug
+  const destinationUrl =
+    cfg?.destination_url ??
+    (landing?.slug
       ? `https://pulse-drab-chi.vercel.app/l/${landing.slug}`
-      : "https://pulse-drab-chi.vercel.app/l/quiz";
-  }
+      : "https://pulse-drab-chi.vercel.app/l/quiz");
 
   const budgetUsd = Number(cfg?.daily_budget_usd ?? draft.budget_usd ?? 5);
   const dailyBudgetMinor = Math.max(100, Math.round(budgetUsd * 100)); // минимум $1
@@ -357,6 +370,8 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
       gender: cfg?.gender ?? "all",
       dailyBudgetMinor,
       namePrefix: "Pulse авто",
+      objective: cfg?.objective ?? "leads",
+      pixelId: landing?.pixel_id ?? null,
     });
 
     await admin
