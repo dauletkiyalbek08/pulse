@@ -13,6 +13,7 @@ import { MetaIntegration } from "@/components/meta-integration";
 import { LeadAdsSetup } from "@/components/lead-ads-setup";
 import { LaunchConfigCard } from "@/components/launch-config";
 import { WebLaunch } from "@/components/web-launch";
+import { AdsSectionTabs } from "@/components/ads-section-tabs";
 import { getMetaStatuses, getLeadPages, getLaunchConfig } from "@/app/p/[projectId]/ads/integration-actions";
 import { getLiveAds } from "@/lib/ads-live";
 import type { AdLevel } from "@/lib/meta";
@@ -36,6 +37,7 @@ export default async function AdsPage({
   const range = rangeFromSearchParams(sp);
   const levelParam = typeof sp.level === "string" ? sp.level : "campaign";
   const level: AdLevel = levelParam === "adset" || levelParam === "ad" ? levelParam : "campaign";
+  const tab = sp.tab === "launch" || sp.tab === "connections" ? sp.tab : "analytics";
 
   const supabase = await createClient();
 
@@ -94,86 +96,109 @@ export default async function AdsPage({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <PageHeader title="Реклама" subtitle="Кабинеты Meta, кампании и расходы (в долларах $) — автоматически">
-        <DateRangePicker preset={range.preset} from={range.from} to={range.to} label={range.label} />
+      <PageHeader title="Реклама" subtitle="Кабинеты Meta, запуск кампаний и аналитика — в долларах $">
+        {tab === "analytics" && (
+          <DateRangePicker preset={range.preset} from={range.from} to={range.to} label={range.label} />
+        )}
       </PageHeader>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Всего на рекламу" value={formatUsd(totalSpend)} icon={Megaphone} tone="brand" />
-        <StatCard label="На курс" value={formatUsd(courseSpend)} icon={GraduationCap} tone="ink" />
-        <StatCard label="На вакансии" value={formatUsd(vacancySpend)} icon={Briefcase} tone="ink" />
-        <StatCard
-          label={`Лиды курса: ${formatNumber(courseLeads)} · цена`}
-          value={courseCpl > 0 ? formatUsd(courseCpl, 2) : "—"}
-          icon={Users}
-          tone="ink"
-        />
-      </div>
+      <AdsSectionTabs tab={tab} />
 
-      {campaigns.length > 0 && (
-        <div className="mb-6 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-muted">Метрики по курсу:</span>
-          <Metric label="CPL · за лид" value={formatUsd(courseCpl, 2)} />
-          <Metric label="CPM · 1000 показов" value={formatUsd(cpm, 2)} />
-          <Metric label="CPC · за клик" value={formatUsd(cpc, 2)} />
-          <Metric label="CTR" value={formatPercent(ctr)} />
-        </div>
+      {/* ─────────────── Аналитика ─────────────── */}
+      {tab === "analytics" && (
+        <>
+          <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatCard label="Всего на рекламу" value={formatUsd(totalSpend)} icon={Megaphone} tone="brand" />
+            <StatCard label="На курс" value={formatUsd(courseSpend)} icon={GraduationCap} tone="ink" />
+            <StatCard label="На вакансии" value={formatUsd(vacancySpend)} icon={Briefcase} tone="ink" />
+            <StatCard
+              label={`Лиды курса: ${formatNumber(courseLeads)} · цена`}
+              value={courseCpl > 0 ? formatUsd(courseCpl, 2) : "—"}
+              icon={Users}
+              tone="ink"
+            />
+          </div>
+
+          {campaigns.length > 0 && (
+            <div className="mb-6 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-muted">Метрики по курсу:</span>
+              <Metric label="CPL · за лид" value={formatUsd(courseCpl, 2)} />
+              <Metric label="CPM · 1000 показов" value={formatUsd(cpm, 2)} />
+              <Metric label="CPC · за клик" value={formatUsd(cpc, 2)} />
+              <Metric label="CTR" value={formatPercent(ctr)} />
+            </div>
+          )}
+
+          {live.errors.length > 0 && (
+            <div className="mb-6 rounded-card bg-red-50 px-4 py-3 text-sm text-red-600">
+              Ошибка Meta: {live.errors.join("; ")}. Проверьте токен кабинета (мог истечь).
+            </div>
+          )}
+
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <AdsTabs level={level} />
+            {campaigns.length > 0 && (
+              <ExportButton
+                filename={`${level}-${projectId.slice(0, 8)}`}
+                headers={["Название", "Цель", "Статус", "Лиды", "CPL $", "CPM $", "CPC $", "CTR", "Охват", "Показы", "Клики", "Потрачено $"]}
+                rows={campExport}
+              />
+            )}
+          </div>
+          <p className="mb-3 text-xs text-muted">
+            {campaigns.length > 0
+              ? `${campaigns.length} · ${range.label}`
+              : live.connected
+                ? `За период «${range.label}» данных нет`
+                : "Подключите кабинет во вкладке «Подключения» — данные подтянутся автоматически"}
+            {level === "ad" && " · видно креативы и лиды по каждому"}
+          </p>
+          <CampaignsTable rows={campaigns} entityLabel={LEVEL_LABEL[level]} />
+        </>
       )}
 
-      {live.errors.length > 0 && (
-        <div className="mb-6 rounded-card bg-red-50 px-4 py-3 text-sm text-red-600">
-          Ошибка Meta: {live.errors.join("; ")}. Проверьте токен кабинета (мог истечь).
-        </div>
+      {/* ─────────────── Запуск рекламы ─────────────── */}
+      {tab === "launch" && (
+        courseStatus ? (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <LaunchConfigCard
+              projectId={projectId}
+              config={launch.config}
+              pages={leadPages}
+              defaultDestination={launch.defaultDestination}
+            />
+            <WebLaunch projectId={projectId} defaultBudget={launch.config.dailyBudgetUsd} />
+          </div>
+        ) : (
+          <div className="rounded-card border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">
+            Сначала подключите рекламный кабинет курса во вкладке{" "}
+            <span className="font-semibold text-ink">«Подключения»</span> — после этого здесь появится запуск рекламы.
+          </div>
+        )
       )}
 
-      {/* Два рекламных кабинета: курс и вакансии */}
-      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <MetaIntegration projectId={projectId} purpose="course" title="Курс" status={courseStatus} />
-        <MetaIntegration projectId={projectId} purpose="vacancy" title="Вакансии" status={vacancyStatus} />
-      </div>
-
-      {courseStatus && (
-        <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <LaunchConfigCard
-            projectId={projectId}
-            config={launch.config}
-            pages={leadPages}
-            defaultDestination={launch.defaultDestination}
-          />
-          <WebLaunch projectId={projectId} defaultBudget={launch.config.dailyBudgetUsd} />
+      {/* ─────────────── Подключения ─────────────── */}
+      {tab === "connections" && (
+        <div className="space-y-8">
+          <div>
+            <h2 className="mb-3 text-sm font-semibold text-ink">Рекламные кабинеты Meta</h2>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <MetaIntegration projectId={projectId} purpose="course" title="Курс" status={courseStatus} />
+              <MetaIntegration projectId={projectId} purpose="vacancy" title="Вакансии" status={vacancyStatus} />
+            </div>
+          </div>
+          <div>
+            <h2 className="mb-3 text-sm font-semibold text-ink">Лид-формы Meta</h2>
+            <LeadAdsSetup
+              projectId={projectId}
+              webhookUrl="https://pulse-drab-chi.vercel.app/api/meta/leads"
+              verifyToken={process.env.META_VERIFY_TOKEN ?? ""}
+              pages={leadPages}
+              connected={statuses.length > 0}
+            />
+          </div>
         </div>
       )}
-
-      <div className="mb-8">
-        <LeadAdsSetup
-          projectId={projectId}
-          webhookUrl="https://pulse-drab-chi.vercel.app/api/meta/leads"
-          verifyToken={process.env.META_VERIFY_TOKEN ?? ""}
-          pages={leadPages}
-          connected={statuses.length > 0}
-        />
-      </div>
-
-      {/* Уровни как в Ads Manager: кампании / группы / объявления */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <AdsTabs level={level} />
-        {campaigns.length > 0 && (
-          <ExportButton
-            filename={`${level}-${projectId.slice(0, 8)}`}
-            headers={["Название", "Цель", "Статус", "Лиды", "CPL $", "CPM $", "CPC $", "CTR", "Охват", "Показы", "Клики", "Потрачено $"]}
-            rows={campExport}
-          />
-        )}
-      </div>
-      <p className="mb-3 text-xs text-muted">
-        {campaigns.length > 0
-          ? `${campaigns.length} · ${range.label}`
-          : live.connected
-            ? `За период «${range.label}» данных нет`
-            : "Подключите кабинет — данные подтянутся автоматически"}
-        {level === "ad" && " · видно креативы и лиды по каждому"}
-      </p>
-      <CampaignsTable rows={campaigns} entityLabel={LEVEL_LABEL[level]} />
     </div>
   );
 }
