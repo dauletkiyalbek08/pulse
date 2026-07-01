@@ -64,8 +64,8 @@ export function QuizFunnel({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    if (phone.trim().length < 6) {
-      setErr("Номеріңізді жазыңыз");
+    if (phone.length < 10) {
+      setErr("Номеріңізді толық жазыңыз");
       return;
     }
     setBusy(true);
@@ -77,7 +77,7 @@ export function QuizFunnel({
       const res = await fetch(`/api/site/leads?t=${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, fbc, fbp, fbclid, note }),
+        body: JSON.stringify({ name, phone: `+7${phone}`, fbc, fbp, fbclid, note }),
       });
       if (!res.ok) throw new Error();
       const w = window as unknown as { fbq?: (...a: unknown[]) => void };
@@ -89,6 +89,16 @@ export function QuizFunnel({
       setBusy(false);
     }
   }
+
+  // Красивый вид номера: «700 000 00 00» (в состоянии храним только цифры).
+  const phoneView =
+    phone.length <= 3
+      ? phone
+      : phone.length <= 6
+        ? `${phone.slice(0, 3)} ${phone.slice(3)}`
+        : phone.length <= 8
+          ? `${phone.slice(0, 3)} ${phone.slice(3, 6)} ${phone.slice(6)}`
+          : `${phone.slice(0, 3)} ${phone.slice(3, 6)} ${phone.slice(6, 8)} ${phone.slice(8)}`;
 
   const Header = (
     <div className="flex flex-col items-center gap-3">
@@ -197,14 +207,20 @@ export function QuizFunnel({
                   placeholder="Аты-жөніңіз"
                   className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-base text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
                 />
-                <input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  type="tel"
-                  inputMode="tel"
-                  placeholder="Номеріңіз"
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-base text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
-                />
+                <div className="flex items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white focus-within:border-gray-400">
+                  <span className="flex select-none items-center gap-1 border-r border-gray-200 bg-gray-50 px-3.5 text-base font-medium text-gray-700">
+                    🇰🇿 +7
+                  </span>
+                  <input
+                    value={phoneView}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder="700 000 00 00"
+                    className="w-full bg-white px-4 py-3.5 text-base text-gray-900 placeholder:text-gray-400 focus:outline-none"
+                  />
+                </div>
                 {err && <p className="text-sm text-red-600">{err}</p>}
                 <button
                   type="submit"
