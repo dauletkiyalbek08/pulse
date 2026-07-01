@@ -12,6 +12,7 @@ import { AdsTabs } from "@/components/ads-tabs";
 import { MetaIntegration } from "@/components/meta-integration";
 import { LeadAdsSetup } from "@/components/lead-ads-setup";
 import { LaunchConfigCard } from "@/components/launch-config";
+import { WebLaunch } from "@/components/web-launch";
 import { getMetaStatuses, getLeadPages, getLaunchConfig } from "@/app/p/[projectId]/ads/integration-actions";
 import { getLiveAds } from "@/lib/ads-live";
 import type { AdLevel } from "@/lib/meta";
@@ -132,13 +133,14 @@ export default async function AdsPage({
       </div>
 
       {courseStatus && (
-        <div className="mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <LaunchConfigCard
             projectId={projectId}
             config={launch.config}
             pages={leadPages}
             defaultDestination={launch.defaultDestination}
           />
+          <WebLaunch projectId={projectId} defaultBudget={launch.config.dailyBudgetUsd} />
         </div>
       )}
 

@@ -122,7 +122,7 @@ export type Database = {
           id: string
           project_id: string
           created_by: string | null
-          chat_id: number
+          chat_id: number | null
           purpose: string
           tg_file_id: string | null
           meta_video_id: string | null
@@ -146,7 +146,7 @@ export type Database = {
           id?: string
           project_id: string
           created_by?: string | null
-          chat_id: number
+          chat_id?: number | null
           purpose?: string
           tg_file_id?: string | null
           meta_video_id?: string | null
@@ -170,7 +170,7 @@ export type Database = {
           id?: string
           project_id?: string
           created_by?: string | null
-          chat_id?: number
+          chat_id?: number | null
           purpose?: string
           tg_file_id?: string | null
           meta_video_id?: string | null
