@@ -140,6 +140,7 @@ export type Database = {
           advantage: boolean
           geo_city: string | null
           collecting: boolean
+          collect_msg_id: number | null
           created_at: string
           updated_at: string
         }
@@ -165,6 +166,7 @@ export type Database = {
           advantage?: boolean
           geo_city?: string | null
           collecting?: boolean
+          collect_msg_id?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -190,6 +192,7 @@ export type Database = {
           advantage?: boolean
           geo_city?: string | null
           collecting?: boolean
+          collect_msg_id?: number | null
           created_at?: string
           updated_at?: string
         }

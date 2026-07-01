@@ -500,7 +500,7 @@ async function handleAdVideo(
 async function getCollectingDraft(admin: Admin, chatId: number) {
   const { data } = await admin
     .from("ad_launches")
-    .select("id, project_id, offer")
+    .select("id, project_id, offer, collect_msg_id")
     .eq("chat_id", chatId)
     .eq("collecting", true)
     .order("created_at", { ascending: false })
@@ -508,6 +508,12 @@ async function getCollectingDraft(admin: Admin, chatId: number) {
     .maybeSingle();
   return data;
 }
+
+const collectText = (n: number) =>
+  "🎬 <b>Новая кампания</b>\n\n" +
+  (n > 0
+    ? `Добавлено креативов: <b>${n}</b>.\n\nПришлите ещё видео/картинки или нажмите «✅ Готово».`
+    : "Присылайте <b>видео</b> (до 20 МБ) и <b>картинки</b> по одному — можно с подписью-оффером. Все они уйдут в одну кампанию.\n\nКогда закончите — нажмите «✅ Готово».");
 
 const collectButtons = (id: string) => [
   [
@@ -559,11 +565,11 @@ async function startCollect(admin: Admin, chatId: number, link: { project_id: st
     await sendMessage(chatId, "Не удалось начать. Попробуйте ещё раз.");
     return;
   }
-  await sendMessage(
-    chatId,
-    "🎬 <b>Новая кампания</b>\n\nПрисылайте <b>видео</b> (до 20 МБ) и <b>картинки</b> по одному — можно с подписью-оффером. Все они уйдут в одну кампанию, Meta протестит их между собой.\n\nКогда закончите — нажмите «✅ Готово».",
-    { buttons: collectButtons(draft.id) },
-  );
+  const sent = (await sendMessage(chatId, collectText(0), { buttons: collectButtons(draft.id) })) as {
+    result?: { message_id?: number };
+  };
+  const msgId = sent?.result?.message_id;
+  if (msgId) await admin.from("ad_launches").update({ collect_msg_id: msgId }).eq("id", draft.id);
 }
 
 /** Добавить присланный файл (видео/картинку) в собираемую кампанию. */
@@ -571,7 +577,7 @@ async function addCollectMedia(
   admin: Admin,
   chatId: number,
   link: { project_id: string; user_id: string },
-  draft: { id: string; project_id: string; offer: string | null },
+  draft: { id: string; project_id: string; offer: string | null; collect_msg_id: number | null },
   msg: TgMessage,
 ): Promise<void> {
   const caption = (msg.caption ?? "").trim();
@@ -643,11 +649,17 @@ async function addCollectMedia(
     return;
   }
 
-  await sendMessage(
-    chatId,
-    `➕ Добавлено креативов: <b>${position + 1}</b>. Пришлите ещё или нажмите «✅ Готово».`,
-    { buttons: collectButtons(draft.id) },
-  );
+  // Обновляем счётчик на ОДНОМ сообщении сборки (без спама на каждый файл)
+  const { count: total } = await admin
+    .from("ad_launch_media")
+    .select("id", { count: "exact", head: true })
+    .eq("launch_id", draft.id);
+  const n = total ?? position + 1;
+  if (draft.collect_msg_id) {
+    await editMessageText(chatId, draft.collect_msg_id, collectText(n), collectButtons(draft.id));
+  } else {
+    await sendMessage(chatId, collectText(n), { buttons: collectButtons(draft.id) });
+  }
 }
 
 /** Callback черновика рекламы: запустить / переписать текст / отменить. */
