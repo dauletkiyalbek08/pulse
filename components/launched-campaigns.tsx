@@ -9,6 +9,7 @@ import {
   stopCreative,
   keepBestCreative,
   attributeLeadToCampaign,
+  enableAttributionOnLive,
   type LaunchedCampaign,
   type CreativeStat,
   type UnattributedLead,
@@ -68,19 +69,51 @@ export function LaunchedCampaigns({
     });
   }
 
+  function enableAttr() {
+    setMsg(null);
+    setBusyId("attr-all");
+    start(async () => {
+      const r = await enableAttributionOnLive(projectId);
+      setBusyId(null);
+      setMsg(
+        r.ok
+          ? `Готово: авто-привязка включена на ${r.ads ?? 0} объявлениях. Новые клики привяжутся к креативу сами.`
+          : r.error ?? "Ошибка",
+      );
+      if (r.ok) router.refresh();
+    });
+  }
+
   return (
     <div className="rounded-card bg-surface p-5 shadow-soft ring-1 ring-line">
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
           <BarChart3 className="h-5 w-5" />
         </span>
-        <div>
+        <div className="flex-1">
           <div className="text-sm font-semibold text-ink">Запущенные кампании</div>
           <div className="text-xs text-muted">
             Расход, продажи, окупаемость (ROAS) и анализ по креативам. Советы также приходят в бот.
           </div>
         </div>
       </div>
+
+      {campaigns.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-canvas px-3 py-2">
+          <span className="flex-1 text-xs text-muted">
+            Привязка лида к креативу — автоматическая при клике по рекламе. Для уже запущенных кампаний включи её один раз:
+          </span>
+          <button
+            type="button"
+            onClick={enableAttr}
+            disabled={pending}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60"
+          >
+            {busyId === "attr-all" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+            Включить авто-привязку креативов
+          </button>
+        </div>
+      )}
 
       {campaigns.length === 0 ? (
         <p className="rounded-lg bg-canvas px-3 py-4 text-center text-sm text-muted">

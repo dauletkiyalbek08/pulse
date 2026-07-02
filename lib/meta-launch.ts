@@ -14,6 +14,10 @@ type Admin = ReturnType<typeof createAdminClient>;
 
 const GRAPH = "https://graph.facebook.com/v23.0";
 
+// Метки атрибуции: Meta подставит id кампании/группы/объявления в URL при клике,
+// лендинг сохранит их в лид → продажи связываются с креативом (ROAS по креативу).
+export const URL_TAGS = "c={{campaign.id}}&as={{adset.id}}&ad={{ad.id}}";
+
 function accountNumber(id: string): string {
   return id.replace(/^act_/, "").trim();
 }
@@ -274,9 +278,8 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
     const creative = await graphPost<{ id: string }>(`act_${acc}/adcreatives`, p.token, {
       name: `${base} · креатив ${i}`,
       object_story_spec: objectStorySpec,
-      // Метки для атрибуции: Meta подставит id кампании/группы/объявления в URL,
-      // лендинг сохранит их в лид → продажи связываются с кампанией (ROAS).
-      url_tags: "c={{campaign.id}}&as={{adset.id}}&ad={{ad.id}}",
+      // Метки для атрибуции (см. URL_TAGS).
+      url_tags: URL_TAGS,
       // Отказ от авто-«расширений браузера» (Позвонить/Messenger/WhatsApp/Форма).
       degrees_of_freedom_spec: {
         creative_features_spec: { site_extensions: { enroll_status: "OPT_OUT" } },
@@ -315,6 +318,20 @@ export async function pauseCampaign(token: string, campaignId: string) {
 /** Поставить одно объявление (креатив) на паузу. */
 export async function pauseAd(token: string, adId: string) {
   await graphPost(adId, token, { status: "PAUSED" });
+}
+
+/** Все id объявлений кампании (для бэкфилла меток атрибуции). */
+export async function fetchCampaignAdIds(token: string, campaignId: string): Promise<string[]> {
+  const url = `${GRAPH}/${campaignId}/ads?fields=id&limit=200&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url, { cache: "no-store" });
+  const json = (await res.json()) as { data?: { id?: string }[]; error?: { message?: string } };
+  if (json.error) throw new Error(json.error.message ?? "Ошибка Meta API");
+  return (json.data ?? []).map((a) => a.id).filter((v): v is string => !!v);
+}
+
+/** Проставить метки атрибуции (url_tags) на объявление — для уже запущенных. */
+export async function setAdUrlTags(token: string, adId: string) {
+  await graphPost(adId, token, { url_tags: URL_TAGS });
 }
 
 /* ─────────────────────────── Текст от AI ─────────────────────────── */
