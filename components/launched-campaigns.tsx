@@ -13,7 +13,18 @@ import {
   type LaunchedCampaign,
   type CreativeStat,
   type UnattributedLead,
+  type CampaignLead,
 } from "@/app/p/[projectId]/ads/launch-actions";
+
+const LEAD_STATUS: Record<string, string> = {
+  new: "Новый",
+  assigned: "Назначен",
+  accepted: "Принят",
+  qualified: "Квалифицирован",
+  processed: "Обработан",
+  trial: "Пробный",
+  sale: "Продажа",
+};
 
 const VERDICT: Record<LaunchedCampaign["verdict"], { label: string; cls: string }> = {
   good: { label: "Прибыльная", cls: "bg-brand-soft text-brand-ink" },
@@ -141,7 +152,14 @@ export function LaunchedCampaigns({
 
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
                   <span>Расход: <b className="text-ink">{usd(c.spend)}</b></span>
-                  <span>Лиды: <b className="text-ink">{c.leads}</b></span>
+                  <button
+                    type="button"
+                    onClick={() => toggle(`leads:${c.id}`)}
+                    className="inline-flex items-center gap-1 hover:text-ink"
+                  >
+                    Лиды: <b className="text-ink">{c.leads}</b>
+                    {c.leadRows.length > 0 && <ChevronDown className={`h-3 w-3 transition ${open.has(`leads:${c.id}`) ? "rotate-180" : ""}`} />}
+                  </button>
                   <span>CPL: <b className="text-ink">{c.leads > 0 ? usd(c.cpl) : "—"}</b></span>
                   <span>Продажи: <b className="text-ink">{c.sales}</b></span>
                   <span>Выручка: <b className="text-ink">{c.revenueKzt > 0 ? kzt(c.revenueKzt) : "—"}</b></span>
@@ -153,6 +171,24 @@ export function LaunchedCampaigns({
                   </span>
                   {c.sales > 0 && <span>Цена продажи: <b className="text-ink">{usd(c.costPerSaleUsd)}</b></span>}
                 </div>
+
+                {/* Список лидов, привязанных к кампании */}
+                {open.has(`leads:${c.id}`) && (
+                  <div className="mt-2 rounded-lg bg-canvas p-2">
+                    {c.leadRows.length === 0 ? (
+                      <p className="text-[11px] text-muted">
+                        Meta насчитала {c.leads} по пикселю, но в CRM к этой кампании пока не привязан ни один
+                        лид. Нажми «Включить авто-привязку креативов» вверху — и новые лиды появятся здесь поимённо.
+                      </p>
+                    ) : (
+                      <div className="space-y-1">
+                        {c.leadRows.map((lr, i) => (
+                          <LeadLine key={i} lr={lr} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Креативы */}
                 {c.creatives.length > 0 && (
@@ -284,6 +320,22 @@ export function LaunchedCampaigns({
       )}
 
       {msg && <p className="mt-3 text-sm text-brand-ink">{msg}</p>}
+    </div>
+  );
+}
+
+function LeadLine({ lr }: { lr: CampaignLead }) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-[11px]">
+      <div className="min-w-0 truncate">
+        <span className="font-medium text-ink">{lr.name}</span>
+        {lr.phone && <span className="ml-2 text-muted">{lr.phone}</span>}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {lr.bought && <span className="rounded bg-brand-soft px-1.5 py-0.5 font-semibold text-brand-ink">💰 купил</span>}
+        <span className="text-muted">{LEAD_STATUS[lr.status] ?? lr.status}</span>
+        <span className="text-faint">{new Date(lr.createdAt).toLocaleDateString("ru-RU")}</span>
+      </div>
     </div>
   );
 }

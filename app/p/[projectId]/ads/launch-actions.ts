@@ -379,6 +379,14 @@ export interface CreativeStat {
   isWinner: boolean;
 }
 
+export interface CampaignLead {
+  name: string;
+  phone: string | null;
+  status: string;
+  createdAt: string;
+  bought: boolean;
+}
+
 export interface LaunchedCampaign {
   id: string;
   headline: string;
@@ -386,7 +394,7 @@ export interface LaunchedCampaign {
   status: string; // active | paused
   budgetUsd: number;
   spend: number;
-  leads: number;
+  leads: number; // счётчик Meta (пиксель)
   cpl: number;
   sales: number;
   revenueKzt: number;
@@ -395,6 +403,7 @@ export interface LaunchedCampaign {
   verdict: Verdict;
   canScale: boolean;
   creatives: CreativeStat[];
+  leadRows: CampaignLead[]; // привязанные лиды из CRM (поимённо)
 }
 
 const GOOD_CPL = 3;
@@ -479,6 +488,35 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
   }
   const allAdIds = (mediaRows ?? []).map((m) => m.meta_ad_id).filter((v): v is string => !!v);
   const revByAd = await getRevenueByAd(admin, projectId, allAdIds);
+
+  // Привязанные лиды из CRM по кампаниям (поимённо) + пометка «купил».
+  const leadsByCampaign = new Map<string, CampaignLead[]>();
+  if (campaignIds.length > 0) {
+    const { data: campLeads } = await admin
+      .from("leads")
+      .select("id, full_name, phone, status, created_at, campaign_id")
+      .eq("project_id", projectId)
+      .in("campaign_id", campaignIds)
+      .order("created_at", { ascending: false });
+    const leadIds = (campLeads ?? []).map((l) => l.id);
+    const boughtSet = new Set<string>();
+    if (leadIds.length > 0) {
+      const { data: s } = await admin.from("sales").select("lead_id").eq("project_id", projectId).in("lead_id", leadIds);
+      for (const row of s ?? []) if (row.lead_id) boughtSet.add(row.lead_id);
+    }
+    for (const l of campLeads ?? []) {
+      if (!l.campaign_id) continue;
+      const arr = leadsByCampaign.get(l.campaign_id) ?? [];
+      arr.push({
+        name: l.full_name,
+        phone: l.phone,
+        status: l.status,
+        createdAt: l.created_at,
+        bought: boughtSet.has(l.id),
+      });
+      leadsByCampaign.set(l.campaign_id, arr);
+    }
+  }
 
   const tokens = new Map<string, string | null>();
   async function tok(purpose: string): Promise<string | null> {
@@ -575,6 +613,7 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
       verdict,
       canScale: liveStatus === "active" && !!r.adset_id,
       creatives,
+      leadRows: (r.campaign_id && leadsByCampaign.get(r.campaign_id)) || [],
     });
   }
   return out;
