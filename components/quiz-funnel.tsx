@@ -163,7 +163,7 @@ export function QuizFunnel({
                 type="button"
                 onClick={() => setStep(1)}
                 style={{ backgroundColor: accent }}
-                className="hl-cta hl-fade mt-6 w-full rounded-xl px-5 py-4 text-base font-bold text-white transition hover:opacity-95"
+                className="hl-cta mt-6 w-full rounded-xl px-5 py-4 text-base font-bold text-white shadow-lg transition hover:opacity-95"
               >
                 {startButton}
               </button>
