@@ -17,7 +17,7 @@ import { AdsSectionTabs } from "@/components/ads-section-tabs";
 import { LaunchedCampaigns } from "@/components/launched-campaigns";
 import { AdEconomics } from "@/components/ad-economics";
 import { getMetaStatuses, getLeadPages, getLaunchConfig } from "@/app/p/[projectId]/ads/integration-actions";
-import { getLaunchedCampaigns, getAdCrmTotals } from "@/app/p/[projectId]/ads/launch-actions";
+import { getLaunchedCampaigns, getAdCrmTotals, getUnattributedAdLeads } from "@/app/p/[projectId]/ads/launch-actions";
 import { getLiveAds } from "@/lib/ads-live";
 import type { AdLevel } from "@/lib/meta";
 
@@ -70,6 +70,7 @@ export default async function AdsPage({
 
   const launchedCampaigns = tab === "launch" ? await getLaunchedCampaigns(projectId) : [];
   const adTotals = tab === "launch" ? await getAdCrmTotals(projectId) : null;
+  const unattributed = tab === "launch" ? await getUnattributedAdLeads(projectId) : [];
   const launchSpendTotal = launchedCampaigns.reduce((s, c) => s + c.spend, 0);
 
   const courseCampaigns = campaigns.filter((c) => c.objective === "course");
@@ -186,7 +187,7 @@ export default async function AdsPage({
               />
               <WebLaunch projectId={projectId} defaultBudget={launch.config.dailyBudgetUsd} />
             </div>
-            <LaunchedCampaigns projectId={projectId} campaigns={launchedCampaigns} />
+            <LaunchedCampaigns projectId={projectId} campaigns={launchedCampaigns} unattributed={unattributed} />
           </div>
         ) : (
           <div className="rounded-card border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">
