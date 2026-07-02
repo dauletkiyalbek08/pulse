@@ -3,7 +3,9 @@ import { requireAccess } from "@/lib/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseQuestions } from "@/lib/quiz-sample";
 import { getLandingFunnel, type LandingFunnel } from "@/lib/landing-funnel";
+import { rangeFromSearchParams } from "@/lib/date-range";
 import { PageHeader } from "@/components/page-header";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { LandingFunnelView } from "@/components/landing-funnel";
 import {
   LandingEditor,
@@ -14,10 +16,17 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function ResourcesPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function ResourcesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const { projectId } = await params;
   await requireAccess(projectId, "resources");
 
+  const range = rangeFromSearchParams(await searchParams);
   const admin = createAdminClient();
   const { data } = await admin
     .from("landings")
@@ -49,18 +58,19 @@ export default async function ResourcesPage({ params }: { params: Promise<{ proj
   const funnels: Record<string, LandingFunnel> = {};
   await Promise.all(
     landings.map(async (l) => {
-      funnels[l.id] = await getLandingFunnel(admin, {
-        id: l.id,
-        type: l.type,
-        questionCount: l.questions.length,
-      });
+      funnels[l.id] = await getLandingFunnel(
+        admin,
+        { id: l.id, type: l.type, questionCount: l.questions.length },
+        range,
+      );
     }),
   );
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <PageHeader title="Ресурсы / Воронки" subtitle="Лендинги и квизы под таргет — заявки сразу в CRM и хантеру">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker preset={range.preset} from={range.from} to={range.to} label={range.label} />
           <CreateQuizButton projectId={projectId} />
           <CreateLandingButton projectId={projectId} />
         </div>
@@ -86,7 +96,7 @@ export default async function ResourcesPage({ params }: { params: Promise<{ proj
           {landings.map((l) => (
             <div key={l.id} className="space-y-3">
               <LandingEditor projectId={projectId} landing={l} />
-              <LandingFunnelView funnel={funnels[l.id]} />
+              <LandingFunnelView funnel={funnels[l.id]} rangeLabel={range.label} />
             </div>
           ))}
         </div>
