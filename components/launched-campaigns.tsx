@@ -2,16 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { TrendingUp, Loader2, Octagon, BarChart3, ChevronDown, Trophy, Film, ImageIcon, Link2 } from "lucide-react";
+import { TrendingUp, Loader2, Octagon, BarChart3, ChevronDown, Trophy, Film, ImageIcon } from "lucide-react";
 import {
   raiseLaunchBudget,
   stopLaunch,
   stopCreative,
   keepBestCreative,
-  attributeLeadToCampaign,
   type LaunchedCampaign,
   type CreativeStat,
-  type UnattributedLead,
   type CampaignLead,
 } from "@/app/p/[projectId]/ads/launch-actions";
 
@@ -42,16 +40,12 @@ const CREATIVE_VERDICT: Record<CreativeStat["verdict"], { label: string; cls: st
 const usd = (n: number, d = 2) => `$${(Math.round(n * 100) / 100).toFixed(d)}`;
 const kzt = (n: number) => `${Math.round(n).toLocaleString("ru-RU")} ₸`;
 
-const kztShort = (n: number) => `${Math.round(n).toLocaleString("ru-RU")} ₸`;
-
 export function LaunchedCampaigns({
   projectId,
   campaigns,
-  unattributed = [],
 }: {
   projectId: string;
   campaigns: LaunchedCampaign[];
-  unattributed?: UnattributedLead[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -199,60 +193,6 @@ export function LaunchedCampaigns({
                             Оставить только лидер (остальные — стоп)
                           </button>
                         )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Ручная привязка лида/продажи к этой кампании */}
-                {unattributed.length > 0 && (
-                  <div className="mt-2">
-                    <button
-                      type="button"
-                      onClick={() => toggle(`attr:${c.id}`)}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink"
-                    >
-                      <Link2 className="h-3.5 w-3.5" />
-                      Привязать лид/продажу вручную
-                    </button>
-                    {open.has(`attr:${c.id}`) && (
-                      <div className="mt-2 space-y-1.5">
-                        <p className="text-[11px] text-muted">
-                          Отметь клиента, который пришёл с этой кампании — его продажа попадёт в её выручку/ROAS.
-                        </p>
-                        {unattributed.map((u) => (
-                          <div
-                            key={u.leadId}
-                            className="flex items-center justify-between gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5"
-                          >
-                            <div className="min-w-0 text-xs">
-                              <span className="font-medium text-ink">{u.name}</span>
-                              <span className="ml-2 text-muted">
-                                {u.saleAmount > 0 ? `купил · ${kztShort(u.saleAmount)}` : "без продажи"} ·{" "}
-                                {new Date(u.createdAt).toLocaleDateString("ru-RU")}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                run(
-                                  `attr:${c.id}:${u.leadId}`,
-                                  () => attributeLeadToCampaign(projectId, u.leadId, c.id),
-                                  "Привязано к кампании.",
-                                )
-                              }
-                              disabled={pending}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-brand-soft px-2 py-1 text-[11px] font-semibold text-brand-ink transition hover:bg-brand-soft/70 disabled:opacity-60"
-                            >
-                              {busyId === `attr:${c.id}:${u.leadId}` ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Link2 className="h-3 w-3" />
-                              )}
-                              Привязать
-                            </button>
-                          </div>
-                        ))}
                       </div>
                     )}
                   </div>

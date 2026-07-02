@@ -276,67 +276,45 @@ export async function getAdCrmTotals(projectId: string, days = 30): Promise<AdCr
   return { leads: leads?.length ?? 0, sales, revenueKzt, usdRate };
 }
 
-export interface UnattributedLead {
-  leadId: string;
+export interface AdLead {
   name: string;
+  phone: string | null;
+  status: string;
   createdAt: string;
-  saleAmount: number; // 0 — если продажи ещё нет
+  bought: boolean;
 }
 
 /**
- * Рекламные лиды БЕЗ привязки к кампании (для ручной привязки владельцем/директором).
- * Покупатели — вперёд. Обычно это заходы до включения авто-меток или прямые визиты.
+ * Все лиды с рекламы (квиз/сайт/Meta) за период — поимённо, покупатели вперёд.
+ * Это люди, пришедшие с рекламы; привязка к конкретной кампании/креативу
+ * подтягивается автоматически с новых кликов (см. url_tags).
  */
-export async function getUnattributedAdLeads(projectId: string, days = 60): Promise<UnattributedLead[]> {
+export async function getAdLeadList(projectId: string, days = 30): Promise<AdLead[]> {
   if (!(await canManage(projectId))) return [];
   const admin = createAdminClient();
   const since = new Date(Date.now() - days * 86400000).toISOString();
   const { data: leads } = await admin
     .from("leads")
-    .select("id, full_name, created_at")
+    .select("id, full_name, phone, status, created_at")
     .eq("project_id", projectId)
     .in("source", AD_SOURCES)
-    .is("campaign_id", null)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(80);
   if (!leads || leads.length === 0) return [];
 
   const ids = leads.map((l) => l.id);
-  const { data: sales } = await admin.from("sales").select("lead_id, amount").eq("project_id", projectId).in("lead_id", ids);
-  const amt = new Map<string, number>();
-  for (const s of sales ?? []) {
-    if (s.lead_id) amt.set(s.lead_id, (amt.get(s.lead_id) ?? 0) + (Number(s.amount) || 0));
-  }
+  const { data: sales } = await admin.from("sales").select("lead_id").eq("project_id", projectId).in("lead_id", ids);
+  const bought = new Set<string>();
+  for (const s of sales ?? []) if (s.lead_id) bought.add(s.lead_id);
 
-  return leads
-    .map((l) => ({ leadId: l.id, name: l.full_name, createdAt: l.created_at, saleAmount: amt.get(l.id) ?? 0 }))
-    .sort((a, b) => (b.saleAmount > 0 ? 1 : 0) - (a.saleAmount > 0 ? 1 : 0));
-}
-
-/** Привязать лид (и его продажу) к кампании — заполняет campaign_id/adset_id лида. */
-export async function attributeLeadToCampaign(
-  projectId: string,
-  leadId: string,
-  launchId: string,
-): Promise<{ ok: boolean; error?: string }> {
-  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
-  const admin = createAdminClient();
-  const { data: l } = await admin
-    .from("ad_launches")
-    .select("campaign_id, adset_id")
-    .eq("id", launchId)
-    .eq("project_id", projectId)
-    .maybeSingle();
-  if (!l?.campaign_id) return { ok: false, error: "Кампания не найдена" };
-  const { error } = await admin
-    .from("leads")
-    .update({ campaign_id: l.campaign_id, adset_id: l.adset_id })
-    .eq("id", leadId)
-    .eq("project_id", projectId);
-  if (error) return { ok: false, error: "Не удалось привязать" };
-  revalidatePath(`/p/${projectId}/ads`);
-  return { ok: true };
+  return leads.map((l) => ({
+    name: l.full_name,
+    phone: l.phone,
+    status: l.status,
+    createdAt: l.created_at,
+    bought: bought.has(l.id),
+  }));
 }
 
 /* ─────────────── Запущенные кампании: список + анализ + действия ─────────────── */
