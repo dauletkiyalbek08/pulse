@@ -6,7 +6,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptSecret } from "@/lib/crypto";
-import { fetchCampaignInsights } from "@/lib/meta";
+import { fetchCampaignInsights, fetchCampaignSyncStatus } from "@/lib/meta";
 import { sendMessage, type InlineButton } from "@/lib/telegram";
 import { almatyYmd } from "@/lib/reports-tg";
 
@@ -76,6 +76,13 @@ export async function runAdAnalysis(admin: Admin): Promise<{ checked: number; no
     if (l.raise_suggested && l.stop_suggested) continue;
     const token = await tokenFor(l.project_id, l.purpose);
     if (!token || !l.campaign_id) continue;
+
+    // Синхронизация с Meta: пропускаем удалённые/остановленные вручную
+    const synced = await fetchCampaignSyncStatus(token, l.campaign_id);
+    if (synced !== "active") {
+      await admin.from("ad_launches").update({ status: synced }).eq("id", l.id);
+      continue;
+    }
 
     const since = String(l.created_at).slice(0, 10);
     let spend = 0;

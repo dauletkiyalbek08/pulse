@@ -412,6 +412,30 @@ export async function fetchTokenPermissions(token: string): Promise<string[]> {
     .map((p) => p.permission);
 }
 
+/**
+ * Реальный статус кампании в нашем понимании (для синхронизации с Meta).
+ * null-ответ (удалена/нет доступа) → 'canceled'.
+ */
+export async function fetchCampaignSyncStatus(
+  token: string,
+  campaignId: string,
+): Promise<"active" | "paused" | "canceled"> {
+  try {
+    const res = await fetch(
+      `${GRAPH}/${campaignId}?fields=effective_status&access_token=${encodeURIComponent(token)}`,
+      { cache: "no-store" },
+    );
+    const json = (await res.json()) as GraphError & { effective_status?: string };
+    if (!res.ok || json.error) return "canceled"; // удалена
+    const eff = json.effective_status ?? "";
+    if (/PAUSED/.test(eff)) return "paused";
+    if (/ARCHIVED|DELETED|DISAPPROVED/.test(eff)) return "canceled";
+    return "active"; // ACTIVE, IN_REVIEW, PENDING_REVIEW, WITH_ISSUES и т.п.
+  } catch {
+    return "canceled";
+  }
+}
+
 /** Итоги по кампании за период: расход и лиды (для авто-анализа). */
 export async function fetchCampaignInsights(
   token: string,

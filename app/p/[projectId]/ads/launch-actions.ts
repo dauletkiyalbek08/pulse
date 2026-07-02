@@ -13,7 +13,7 @@ import {
   updateAdSetBudget,
   pauseCampaign,
 } from "@/lib/meta-launch";
-import { fetchCampaignInsights } from "@/lib/meta";
+import { fetchCampaignInsights, fetchCampaignSyncStatus } from "@/lib/meta";
 import { almatyYmd } from "@/lib/reports-tg";
 
 const MANAGE_ROLES = ["owner", "director", "marketer", "targetologist"];
@@ -252,6 +252,18 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
   const out: LaunchedCampaign[] = [];
   for (const r of rows) {
     const token = await tok(r.purpose);
+
+    // Синхронизация статуса с Meta (мог удалить/остановить вручную)
+    let liveStatus = r.status;
+    if (token && r.campaign_id) {
+      const synced = await fetchCampaignSyncStatus(token, r.campaign_id);
+      if (synced !== r.status) {
+        await admin.from("ad_launches").update({ status: synced }).eq("id", r.id);
+        liveStatus = synced;
+      }
+    }
+    if (liveStatus === "canceled") continue; // удалена в Meta — не показываем
+
     let spend = 0;
     let leads = 0;
     if (token && r.campaign_id) {
@@ -273,13 +285,13 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
       id: r.id,
       headline: r.headline ?? "Авто-кампания",
       createdAt: r.created_at,
-      status: r.status,
+      status: liveStatus,
       budgetUsd: Number(r.budget_usd),
       spend,
       leads,
       cpl,
       verdict,
-      canScale: r.status === "active" && !!r.adset_id,
+      canScale: liveStatus === "active" && !!r.adset_id,
     });
   }
   return out;
