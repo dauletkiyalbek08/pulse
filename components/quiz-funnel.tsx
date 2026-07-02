@@ -21,7 +21,6 @@ export interface QuizSocials {
 export function QuizFunnel({
   token,
   pixelId,
-  logo,
   title,
   subtitle,
   startButton,
@@ -33,7 +32,7 @@ export function QuizFunnel({
 }: {
   token: string;
   pixelId: string | null;
-  logo: string | null;
+  logo?: string | null;
   title: string;
   subtitle: string;
   startButton: string;
@@ -102,16 +101,7 @@ export function QuizFunnel({
           : `${phone.slice(0, 3)} ${phone.slice(3, 6)} ${phone.slice(6, 8)} ${phone.slice(8)}`;
 
   const Header = (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2 text-lg font-bold tracking-tight text-white">
-        <span
-          className="flex h-8 w-8 items-center justify-center rounded-xl text-sm font-black text-white shadow-lg"
-          style={{ backgroundColor: accent }}
-        >
-          {(logo || "A").charAt(0).toUpperCase()}
-        </span>
-        {logo || "bilimdibol.eng"}
-      </div>
+    <div className="flex justify-center">
       <Flags />
     </div>
   );
@@ -219,8 +209,9 @@ export function QuizFunnel({
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-base text-gray-900 placeholder:text-gray-400 transition focus:border-gray-400 focus:bg-white focus:outline-none"
                 />
                 <div className="flex items-stretch overflow-hidden rounded-xl border border-gray-200 bg-gray-50 transition focus-within:border-gray-400 focus-within:bg-white">
-                  <span className="flex select-none items-center gap-1 border-r border-gray-200 px-3.5 text-base font-medium text-gray-700">
-                    🇰🇿 +7
+                  <span className="flex select-none items-center gap-1.5 whitespace-nowrap border-r border-gray-200 px-3.5 text-base font-medium text-gray-700">
+                    <span className="text-lg leading-none">🇰🇿</span>
+                    <span>+7</span>
                   </span>
                   <input
                     value={phoneView}

@@ -41,7 +41,6 @@ const DEFAULT_BULLETS = [
 export function HeroLanding({
   token,
   pixelId,
-  logo,
   title,
   subtitle,
   bullets,
@@ -52,7 +51,7 @@ export function HeroLanding({
 }: {
   token: string;
   pixelId: string | null;
-  logo: string | null;
+  logo?: string | null;
   title: string;
   subtitle: string;
   bullets: string[];
@@ -112,17 +111,8 @@ export function HeroLanding({
       <LandingBlobs accent={accent} />
 
       <div className="relative mx-auto flex min-h-screen max-w-lg flex-col px-5 pb-10 pt-8">
-        {/* Логотип + флаги */}
-        <div className="hl-fade flex items-center justify-between" style={{ animationDelay: "0ms" }}>
-          <div className="flex items-center gap-2 text-lg font-bold tracking-tight">
-            <span
-              className="flex h-8 w-8 items-center justify-center rounded-xl text-sm font-black text-white shadow-lg"
-              style={{ backgroundColor: accent }}
-            >
-              A
-            </span>
-            {logo || "bilimdibol.eng"}
-          </div>
+        {/* Флаги-«мост» */}
+        <div className="hl-fade flex justify-center" style={{ animationDelay: "0ms" }}>
           <Flags />
         </div>
 
@@ -187,8 +177,9 @@ export function HeroLanding({
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-base text-gray-900 placeholder:text-gray-400 transition focus:border-gray-400 focus:bg-white focus:outline-none"
                 />
                 <div className="flex items-stretch overflow-hidden rounded-xl border border-gray-200 bg-gray-50 transition focus-within:border-gray-400 focus-within:bg-white">
-                  <span className="flex select-none items-center gap-1 border-r border-gray-200 px-3.5 text-base font-medium text-gray-700">
-                    🇰🇿 +7
+                  <span className="flex select-none items-center gap-1.5 whitespace-nowrap border-r border-gray-200 px-3.5 text-base font-medium text-gray-700">
+                    <span className="text-lg leading-none">🇰🇿</span>
+                    <span>+7</span>
                   </span>
                   <input
                     value={phoneView}
@@ -229,7 +220,7 @@ export function HeroLanding({
 
         <div className="flex-1" />
         <p className="hl-fade mt-8 text-center text-xs text-white/40" style={{ animationDelay: "600ms" }}>
-          © {new Date().getFullYear()} {logo || "bilimdibol.eng"}
+          © {new Date().getFullYear()} · Ағылшын тілі мектебі
         </p>
       </div>
     </main>
