@@ -54,3 +54,48 @@ export async function getRevenueByCampaign(
   }
   return out;
 }
+
+/**
+ * Выручка/продажи по объявлениям (креативам): лид тегируется ad_id,
+ * продажа ссылается на lead_id. Возвращает map ad_id → {sales, revenue}.
+ */
+export async function getRevenueByAd(
+  admin: Admin,
+  projectId: string,
+  adIds: string[],
+): Promise<Map<string, CampaignRevenue>> {
+  const out = new Map<string, CampaignRevenue>();
+  const ids = adIds.filter(Boolean);
+  if (ids.length === 0) return out;
+
+  const { data: leads } = await admin
+    .from("leads")
+    .select("id, ad_id")
+    .eq("project_id", projectId)
+    .in("ad_id", ids);
+  if (!leads || leads.length === 0) return out;
+
+  const leadToAd = new Map<string, string>();
+  for (const l of leads) {
+    if (l.ad_id) leadToAd.set(l.id, l.ad_id);
+  }
+  const leadIds = [...leadToAd.keys()];
+  if (leadIds.length === 0) return out;
+
+  const { data: sales } = await admin
+    .from("sales")
+    .select("lead_id, amount")
+    .eq("project_id", projectId)
+    .in("lead_id", leadIds);
+
+  for (const s of sales ?? []) {
+    if (!s.lead_id) continue;
+    const ad = leadToAd.get(s.lead_id);
+    if (!ad) continue;
+    const cur = out.get(ad) ?? { sales: 0, revenue: 0 };
+    cur.sales += 1;
+    cur.revenue += Number(s.amount) || 0;
+    out.set(ad, cur);
+  }
+  return out;
+}

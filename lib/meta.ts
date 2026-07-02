@@ -451,6 +451,30 @@ export async function fetchCampaignInsights(
   return { spend: Number(row?.spend || 0), leads: pickLeads(row?.actions) };
 }
 
+export interface AdInsight {
+  adId: string;
+  spend: number;
+  leads: number;
+}
+
+/** Расход/лиды по КАЖДОМУ объявлению кампании за период (для анализа креативов). */
+export async function fetchAdInsightsForCampaign(
+  token: string,
+  campaignId: string,
+  since: string,
+  until: string,
+): Promise<AdInsight[]> {
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
+  const url =
+    `${GRAPH}/${campaignId}/insights?level=ad&fields=ad_id,spend,actions` +
+    `&time_range=${tr}&limit=200&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url, { cache: "no-store" });
+  const json = (await res.json()) as { data?: { ad_id?: string; spend?: string; actions?: { action_type: string; value: string }[] }[] };
+  return (json.data ?? [])
+    .filter((r) => r.ad_id)
+    .map((r) => ({ adId: String(r.ad_id), spend: Number(r.spend || 0), leads: pickLeads(r.actions) }));
+}
+
 /** Facebook-страницы, доступные токену (для подписки на лид-формы). */
 export async function fetchPages(token: string): Promise<MetaPage[]> {
   const res = await fetch(

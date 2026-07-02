@@ -312,6 +312,11 @@ export async function pauseCampaign(token: string, campaignId: string) {
   await graphPost(campaignId, token, { status: "PAUSED" });
 }
 
+/** Поставить одно объявление (креатив) на паузу. */
+export async function pauseAd(token: string, adId: string) {
+  await graphPost(adId, token, { status: "PAUSED" });
+}
+
 /* ─────────────────────────── Текст от AI ─────────────────────────── */
 
 export interface AdCopy {

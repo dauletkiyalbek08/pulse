@@ -12,9 +12,10 @@ import {
   launchFromDraft,
   updateAdSetBudget,
   pauseCampaign,
+  pauseAd,
 } from "@/lib/meta-launch";
-import { fetchCampaignInsights, fetchCampaignSyncStatus } from "@/lib/meta";
-import { getRevenueByCampaign } from "@/lib/ad-revenue";
+import { fetchAdInsightsForCampaign, fetchCampaignSyncStatus, type AdInsight } from "@/lib/meta";
+import { getRevenueByCampaign, getRevenueByAd } from "@/lib/ad-revenue";
 import { almatyYmd } from "@/lib/reports-tg";
 
 const MANAGE_ROLES = ["owner", "director", "marketer", "targetologist"];
@@ -200,6 +201,22 @@ export interface WebLaunchOutcome {
 
 /* ─────────────── Запущенные кампании: список + анализ + действия ─────────────── */
 
+type Verdict = "good" | "ok" | "bad" | "early";
+
+export interface CreativeStat {
+  adId: string;
+  kind: string; // video | image
+  thumb: string | null;
+  spend: number;
+  leads: number;
+  cpl: number;
+  sales: number;
+  revenueKzt: number;
+  roas: number;
+  verdict: Verdict;
+  isWinner: boolean;
+}
+
 export interface LaunchedCampaign {
   id: string;
   headline: string;
@@ -213,12 +230,36 @@ export interface LaunchedCampaign {
   revenueKzt: number;
   roas: number; // выручка / расход (в одной валюте)
   costPerSaleUsd: number;
-  verdict: "good" | "ok" | "bad" | "early";
+  verdict: Verdict;
   canScale: boolean;
+  creatives: CreativeStat[];
 }
 
 const GOOD_CPL = 3;
 const NO_SALE_STOP_SPEND = 15; // потрачено столько без единой продажи — тревога
+
+/** Вердикт одного креатива (пороги мягче: бюджеты меньше кампании). */
+function creativeVerdict(o: { spend: number; leads: number; cpl: number; sales: number; roas: number }): Verdict {
+  if (o.spend < 1) return "early";
+  if (o.sales > 0) return o.roas >= 2 ? "good" : o.roas >= 1 ? "ok" : "bad";
+  if (o.leads > 0 && o.cpl <= GOOD_CPL) return "good";
+  if (o.leads === 0 && o.spend >= 3) return "bad";
+  return "ok";
+}
+
+/** Помечает лучший креатив (по продажам → ROAS → лидам → дешевизне лида). */
+function flagWinner(list: CreativeStat[]): void {
+  const ranked = list.filter((c) => c.spend > 0 && (c.sales > 0 || c.leads > 0));
+  if (list.length < 2 || ranked.length === 0) return;
+  ranked.sort(
+    (a, b) =>
+      b.sales - a.sales ||
+      b.roas - a.roas ||
+      b.leads - a.leads ||
+      (a.cpl || Infinity) - (b.cpl || Infinity),
+  );
+  ranked[0].isWinner = true;
+}
 
 /** Вердикт кампании: если есть продажи — по окупаемости (ROAS), иначе по лидам/CPL. */
 function campaignVerdict(o: {
@@ -261,6 +302,22 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
   const campaignIds = rows.map((r) => r.campaign_id).filter((v): v is string => !!v);
   const revByCampaign = await getRevenueByCampaign(admin, projectId, campaignIds);
 
+  // Креативы всех кампаний одним запросом + выручка по объявлениям.
+  const launchIds = rows.map((r) => r.id);
+  const { data: mediaRows } = await admin
+    .from("ad_launch_media")
+    .select("launch_id, kind, thumb_url, image_url, meta_ad_id, position")
+    .in("launch_id", launchIds)
+    .order("position", { ascending: true });
+  const mediaByLaunch = new Map<string, NonNullable<typeof mediaRows>>();
+  for (const m of mediaRows ?? []) {
+    const arr = mediaByLaunch.get(m.launch_id) ?? [];
+    arr.push(m);
+    mediaByLaunch.set(m.launch_id, arr);
+  }
+  const allAdIds = (mediaRows ?? []).map((m) => m.meta_ad_id).filter((v): v is string => !!v);
+  const revByAd = await getRevenueByAd(admin, projectId, allAdIds);
+
   const tokens = new Map<string, string | null>();
   async function tok(purpose: string): Promise<string | null> {
     if (tokens.has(purpose)) return tokens.get(purpose) ?? null;
@@ -296,23 +353,50 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
     }
     if (liveStatus === "canceled") continue; // удалена в Meta — не показываем
 
-    let spend = 0;
-    let leads = 0;
+    // Инсайты по объявлениям (сумма = итог кампании, плюс разбивка по креативам).
+    let adInsights: AdInsight[] = [];
     if (token && r.campaign_id) {
       try {
-        const s = await fetchCampaignInsights(token, r.campaign_id, String(r.created_at).slice(0, 10), until);
-        spend = s.spend;
-        leads = s.leads;
+        adInsights = await fetchAdInsightsForCampaign(token, r.campaign_id, String(r.created_at).slice(0, 10), until);
       } catch {
         // статистика не критична — покажем 0
       }
     }
+    const insightByAd = new Map(adInsights.map((a) => [a.adId, a]));
+    const spend = adInsights.reduce((s, a) => s + a.spend, 0);
+    const leads = adInsights.reduce((s, a) => s + a.leads, 0);
+
     const cpl = leads > 0 ? spend / leads : 0;
     const rev = (r.campaign_id && revByCampaign.get(r.campaign_id)) || { sales: 0, revenue: 0 };
     const spendKzt = spend * usdRate;
     const roas = spendKzt > 0 ? rev.revenue / spendKzt : 0;
     const costPerSaleUsd = rev.sales > 0 ? spend / rev.sales : 0;
     const verdict = campaignVerdict({ spend, leads, cpl, sales: rev.sales, roas });
+
+    // Разбивка по креативам.
+    const creatives: CreativeStat[] = (mediaByLaunch.get(r.id) ?? [])
+      .filter((m) => m.meta_ad_id)
+      .map((m) => {
+        const ins = insightByAd.get(m.meta_ad_id as string) ?? { spend: 0, leads: 0 };
+        const cr = revByAd.get(m.meta_ad_id as string) ?? { sales: 0, revenue: 0 };
+        const cCpl = ins.leads > 0 ? ins.spend / ins.leads : 0;
+        const cRoas = ins.spend * usdRate > 0 ? cr.revenue / (ins.spend * usdRate) : 0;
+        return {
+          adId: m.meta_ad_id as string,
+          kind: m.kind,
+          thumb: m.thumb_url ?? m.image_url ?? null,
+          spend: ins.spend,
+          leads: ins.leads,
+          cpl: cCpl,
+          sales: cr.sales,
+          revenueKzt: cr.revenue,
+          roas: cRoas,
+          verdict: creativeVerdict({ spend: ins.spend, leads: ins.leads, cpl: cCpl, sales: cr.sales, roas: cRoas }),
+          isWinner: false,
+        };
+      });
+    flagWinner(creatives);
+
     out.push({
       id: r.id,
       headline: r.headline ?? "Авто-кампания",
@@ -328,6 +412,7 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
       costPerSaleUsd,
       verdict,
       canScale: liveStatus === "active" && !!r.adset_id,
+      creatives,
     });
   }
   return out;
@@ -359,6 +444,87 @@ export async function raiseLaunchBudget(projectId: string, launchId: string): Pr
   await admin.from("ad_launches").update({ budget_usd: newBudget, raise_suggested: false }).eq("id", launchId);
   revalidatePath(`/p/${projectId}/ads`);
   return { ok: true };
+}
+
+/** Токен кабинета проекта по назначению кампании (course/vacancy). */
+async function tokenForLaunch(
+  admin: ReturnType<typeof createAdminClient>,
+  projectId: string,
+  purpose: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("meta_integration")
+    .select("token_enc")
+    .eq("project_id", projectId)
+    .eq("purpose", purpose)
+    .maybeSingle();
+  try {
+    return data?.token_enc ? decryptSecret(data.token_enc) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Остановить один креатив (объявление) кампании. */
+export async function stopCreative(
+  projectId: string,
+  launchId: string,
+  adId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  const admin = createAdminClient();
+  const { data: l } = await admin
+    .from("ad_launches")
+    .select("purpose")
+    .eq("id", launchId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (!l) return { ok: false, error: "Кампания не найдена" };
+  const token = await tokenForLaunch(admin, projectId, l.purpose);
+  if (!token) return { ok: false, error: "Кабинет не подключён" };
+  try {
+    await pauseAd(token, adId);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Meta отклонила" };
+  }
+  revalidatePath(`/p/${projectId}/ads`);
+  return { ok: true };
+}
+
+/** Оставить только лучший креатив: остальные в кампании — на паузу. */
+export async function keepBestCreative(
+  projectId: string,
+  launchId: string,
+): Promise<{ ok: boolean; error?: string; paused?: number }> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  const admin = createAdminClient();
+  const list = await getLaunchedCampaigns(projectId);
+  const camp = list.find((c) => c.id === launchId);
+  if (!camp) return { ok: false, error: "Кампания не найдена" };
+  const winner = camp.creatives.find((c) => c.isWinner);
+  if (!winner) return { ok: false, error: "Победитель ещё не определён — мало данных" };
+
+  const { data: l } = await admin
+    .from("ad_launches")
+    .select("purpose")
+    .eq("id", launchId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  const token = l ? await tokenForLaunch(admin, projectId, l.purpose) : null;
+  if (!token) return { ok: false, error: "Кабинет не подключён" };
+
+  let paused = 0;
+  for (const c of camp.creatives) {
+    if (c.adId === winner.adId) continue;
+    try {
+      await pauseAd(token, c.adId);
+      paused += 1;
+    } catch {
+      // продолжаем — часть могла быть уже на паузе
+    }
+  }
+  revalidatePath(`/p/${projectId}/ads`);
+  return { ok: true, paused };
 }
 
 export async function stopLaunch(projectId: string, launchId: string): Promise<{ ok: boolean; error?: string }> {

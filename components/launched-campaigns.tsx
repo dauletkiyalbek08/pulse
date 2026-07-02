@@ -2,11 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { TrendingUp, Loader2, Octagon, BarChart3 } from "lucide-react";
+import { TrendingUp, Loader2, Octagon, BarChart3, ChevronDown, Trophy, Film, ImageIcon } from "lucide-react";
 import {
   raiseLaunchBudget,
   stopLaunch,
+  stopCreative,
+  keepBestCreative,
   type LaunchedCampaign,
+  type CreativeStat,
 } from "@/app/p/[projectId]/ads/launch-actions";
 
 const VERDICT: Record<LaunchedCampaign["verdict"], { label: string; cls: string }> = {
@@ -14,6 +17,13 @@ const VERDICT: Record<LaunchedCampaign["verdict"], { label: string; cls: string 
   ok: { label: "Окупается", cls: "bg-canvas text-muted ring-1 ring-line" },
   bad: { label: "В минус", cls: "bg-red-50 text-red-600" },
   early: { label: "Мало данных", cls: "bg-amber-50 text-amber-700" },
+};
+
+const CREATIVE_VERDICT: Record<CreativeStat["verdict"], { label: string; cls: string }> = {
+  good: { label: "🏅 сильный", cls: "text-brand-ink" },
+  ok: { label: "норм", cls: "text-muted" },
+  bad: { label: "слабый", cls: "text-red-600" },
+  early: { label: "мало данных", cls: "text-amber-700" },
 };
 
 const usd = (n: number, d = 2) => `$${(Math.round(n * 100) / 100).toFixed(d)}`;
@@ -30,26 +40,24 @@ export function LaunchedCampaigns({
   const [pending, start] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [open, setOpen] = useState<Set<string>>(new Set());
 
-  function raise(id: string) {
-    setMsg(null);
-    setBusyId(id);
-    start(async () => {
-      const r = await raiseLaunchBudget(projectId, id);
-      setBusyId(null);
-      setMsg(r.ok ? "Бюджет поднят на 50%." : r.error ?? "Ошибка");
-      if (r.ok) router.refresh();
+  function toggle(id: string) {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   }
 
-  function stop(id: string) {
-    if (!confirm("Остановить кампанию?")) return;
+  function run(id: string, fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string) {
     setMsg(null);
     setBusyId(id);
     start(async () => {
-      const r = await stopLaunch(projectId, id);
+      const r = await fn();
       setBusyId(null);
-      setMsg(r.ok ? "Кампания остановлена." : r.error ?? "Ошибка");
+      setMsg(r.ok ? okMsg : r.error ?? "Ошибка");
       if (r.ok) router.refresh();
     });
   }
@@ -62,7 +70,9 @@ export function LaunchedCampaigns({
         </span>
         <div>
           <div className="text-sm font-semibold text-ink">Запущенные кампании</div>
-          <div className="text-xs text-muted">Анализ Pulse: расход, продажи, окупаемость (ROAS) и действия. Советы также приходят в бот.</div>
+          <div className="text-xs text-muted">
+            Расход, продажи, окупаемость (ROAS) и анализ по креативам. Советы также приходят в бот.
+          </div>
         </div>
       </div>
 
@@ -75,6 +85,8 @@ export function LaunchedCampaigns({
           {campaigns.map((c) => {
             const v = VERDICT[c.verdict];
             const paused = c.status === "paused";
+            const expanded = open.has(c.id);
+            const hasWinner = c.creatives.some((cr) => cr.isWinner);
             return (
               <div key={c.id} className="rounded-xl border border-line bg-canvas p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -103,11 +115,56 @@ export function LaunchedCampaigns({
                   {c.sales > 0 && <span>Цена продажи: <b className="text-ink">{usd(c.costPerSaleUsd)}</b></span>}
                 </div>
 
+                {/* Креативы */}
+                {c.creatives.length > 0 && (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => toggle(c.id)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-brand-ink hover:underline"
+                    >
+                      <ChevronDown className={`h-3.5 w-3.5 transition ${expanded ? "rotate-180" : ""}`} />
+                      Креативы: {c.creatives.length}
+                      {hasWinner && <span className="ml-1 text-amber-600">· есть лидер 🏆</span>}
+                    </button>
+
+                    {expanded && (
+                      <div className="mt-2 space-y-1.5">
+                        {c.creatives.map((cr, i) => (
+                          <CreativeRow
+                            key={cr.adId}
+                            index={i}
+                            cr={cr}
+                            paused={paused}
+                            busy={busyId === `${c.id}:${cr.adId}` && pending}
+                            onStop={() =>
+                              run(`${c.id}:${cr.adId}`, () => stopCreative(projectId, c.id, cr.adId), "Креатив остановлен.")
+                            }
+                          />
+                        ))}
+                        {!paused && hasWinner && c.creatives.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              run(`${c.id}:best`, () => keepBestCreative(projectId, c.id), "Оставлен только лидер.")
+                            }
+                            disabled={pending}
+                            className="mt-1 inline-flex items-center gap-1.5 rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-semibold text-brand-ink transition hover:bg-brand-soft/70 disabled:opacity-60"
+                          >
+                            <Trophy className="h-3.5 w-3.5" />
+                            Оставить только лидер (остальные — стоп)
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {!paused && (
                   <div className="mt-2.5 flex gap-2">
                     <button
                       type="button"
-                      onClick={() => raise(c.id)}
+                      onClick={() => run(c.id, () => raiseLaunchBudget(projectId, c.id), "Бюджет поднят на 50%.")}
                       disabled={pending || !c.canScale}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60"
                     >
@@ -116,7 +173,9 @@ export function LaunchedCampaigns({
                     </button>
                     <button
                       type="button"
-                      onClick={() => stop(c.id)}
+                      onClick={() => {
+                        if (confirm("Остановить кампанию?")) run(c.id, () => stopLaunch(projectId, c.id), "Кампания остановлена.");
+                      }}
                       disabled={pending}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60"
                     >
@@ -132,6 +191,72 @@ export function LaunchedCampaigns({
       )}
 
       {msg && <p className="mt-3 text-sm text-brand-ink">{msg}</p>}
+    </div>
+  );
+}
+
+function CreativeRow({
+  index,
+  cr,
+  paused,
+  busy,
+  onStop,
+}: {
+  index: number;
+  cr: CreativeStat;
+  paused: boolean;
+  busy: boolean;
+  onStop: () => void;
+}) {
+  const vv = CREATIVE_VERDICT[cr.verdict];
+  return (
+    <div
+      className={`flex items-center gap-2.5 rounded-lg border p-2 ${
+        cr.isWinner ? "border-brand bg-brand-soft/40" : "border-line bg-surface"
+      }`}
+    >
+      <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-md bg-canvas ring-1 ring-line">
+        {cr.thumb ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cr.thumb} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-faint">
+            {cr.kind === "video" ? <Film className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+          </span>
+        )}
+        {cr.isWinner && (
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px]">
+            🏆
+          </span>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="font-medium text-ink">Креатив {index + 1}</span>
+          <span className={`font-medium ${vv.cls}`}>{vv.label}</span>
+        </div>
+        <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
+          <span>{usd(cr.spend)}</span>
+          <span>лиды {cr.leads}</span>
+          <span>CPL {cr.leads > 0 ? usd(cr.cpl) : "—"}</span>
+          <span>прод. {cr.sales}</span>
+          <span>ROAS {cr.sales > 0 ? `${cr.roas.toFixed(1)}×` : "—"}</span>
+        </div>
+      </div>
+
+      {!paused && (
+        <button
+          type="button"
+          onClick={onStop}
+          disabled={busy}
+          title="Остановить этот креатив"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-[11px] font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+        >
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Octagon className="h-3 w-3" />}
+          Стоп
+        </button>
+      )}
     </div>
   );
 }
