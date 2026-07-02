@@ -139,7 +139,7 @@ export function QuizFunnel({
           </div>
         )}
 
-        <div className="flex flex-1 flex-col justify-center py-6">
+        <div className="flex flex-1 flex-col justify-center py-4">
           {done ? (
             <div className="flex flex-col items-center gap-3 rounded-3xl border border-white/10 bg-white/5 px-6 py-14 text-center backdrop-blur">
               <CheckCircle2 className="hl-pop h-16 w-16" style={{ color: accent }} />
@@ -149,21 +149,21 @@ export function QuizFunnel({
             /* Интро */
             <div className="text-center">
               <div className="hl-fade flex justify-center" style={{ animationDelay: "80ms" }}>
-                <Skyline accent={accent} />
+                <Skyline accent={accent} className="max-w-[230px]" />
               </div>
               <div className="hl-fade" style={{ animationDelay: "200ms" }}>
                 <div className="mx-auto mb-3 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur">
                   <Sparkles className="h-3.5 w-3.5" style={{ color: accent }} />
                   Ағылшын тілі мектебі
                 </div>
-                <h1 className="text-[26px] font-extrabold leading-tight sm:text-3xl">{title}</h1>
-                {subtitle && <p className="mx-auto mt-3 max-w-md text-[15px] text-white/70">{subtitle}</p>}
+                <h1 className="text-2xl font-extrabold leading-tight sm:text-3xl">{title}</h1>
+                {subtitle && <p className="mx-auto mt-2.5 max-w-md text-sm text-white/70">{subtitle}</p>}
               </div>
               <button
                 type="button"
                 onClick={() => setStep(1)}
                 style={{ backgroundColor: accent }}
-                className="hl-cta hl-fade mt-7 w-full rounded-xl px-5 py-4 text-base font-bold text-white shadow-lg transition hover:opacity-95"
+                className="hl-cta hl-fade mt-6 w-full rounded-xl px-5 py-4 text-base font-bold text-white transition hover:opacity-95"
               >
                 {startButton}
               </button>

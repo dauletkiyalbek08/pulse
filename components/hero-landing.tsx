@@ -117,7 +117,7 @@ export function HeroLanding({
 
         {/* Иллюстрация */}
         <div className="hl-fade relative mt-6 flex justify-center" style={{ animationDelay: "120ms" }}>
-          <Skyline accent={accent} />
+          <Skyline accent={accent} className="max-w-[240px]" />
         </div>
 
         {/* Заголовок */}

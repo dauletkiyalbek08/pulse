@@ -42,6 +42,9 @@ export function Starfield() {
           }}
         />
       ))}
+      {/* Падающие звёзды — пролетают по небу между башнями */}
+      <span className="hl-shoot" style={{ top: "16%", left: 0 }} />
+      <span className="hl-shoot" style={{ top: "30%", left: 0, animationDelay: "3.5s" }} />
     </div>
   );
 }
@@ -74,32 +77,16 @@ export function Flags() {
 }
 
 /**
- * Стилизованная сцена: Статуя Свободы и Биг-Бен рядом по центру, над ними
- * по дуге летит самолётик (эмодзи), сверху — мерцающие звёзды.
- * Позиционирование — на внешней группе (transform-атрибут), «парение» — на
- * внутренней (CSS-класс), чтобы одно не перебивало другое.
+ * Стилизованная сцена: Статуя Свободы и Биг-Бен стоят рядом на одной линии
+ * земли и мягко парят. Позиционирование — на внешней группе (transform-атрибут),
+ * «парение» — на внутренней (CSS-класс), чтобы одно не перебивало другое.
+ * Основания выровнены: у обеих низ на y=138.
  */
 export function Skyline({ accent, className = "" }: { accent: string; className?: string }) {
   return (
-    <svg viewBox="0 0 320 150" className={`w-full max-w-sm ${className}`} fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* звёзды */}
-      <g fill="#ffffff">
-        <circle className="hl-tw" cx="36" cy="20" r="1.5" />
-        <circle className="hl-tw2" cx="88" cy="12" r="1.1" />
-        <circle className="hl-tw" cx="230" cy="16" r="1.4" />
-        <circle className="hl-tw2" cx="286" cy="30" r="1.1" />
-        <circle className="hl-tw" cx="160" cy="8" r="1.2" />
-      </g>
-
-      {/* пунктирная дуга перелёта */}
-      <path d="M30 66 Q160 6 290 66" stroke="#ffffff" strokeOpacity="0.14" strokeWidth="1.5" strokeDasharray="4 6" />
-      {/* самолётик (эмодзи — узнаваемый), летит по дуге */}
-      <g className="hl-fly">
-        <text x="-9" y="6" fontSize="17">✈️</text>
-      </g>
-
-      {/* Статуя Свободы (стилизованная) */}
-      <g transform="translate(96 34)">
+    <svg viewBox="0 0 320 150" className={`w-full ${className}`} fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Статуя Свободы (стилизованная) — низ на y=138 */}
+      <g transform="translate(96 30)">
         <g className="hl-float">
           <path d="M20 0 l4 8 -8 0 z" fill={accent} />
           <path d="M17 8 h6 v5 h-6 z" fill="#e2e8f0" />
@@ -119,8 +106,8 @@ export function Skyline({ accent, className = "" }: { accent: string; className?
         </g>
       </g>
 
-      {/* Биг-Бен (стилизованный) */}
-      <g transform="translate(184 26)">
+      {/* Биг-Бен (стилизованный) — низ на y=138 */}
+      <g transform="translate(184 38)">
         <g className="hl-float2">
           <path d="M20 0 l7 16 -14 0 z" fill={accent} />
           <rect x="16" y="16" width="8" height="6" fill="#e2e8f0" />
