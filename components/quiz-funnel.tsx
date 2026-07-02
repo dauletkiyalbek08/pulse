@@ -121,6 +121,7 @@ export function QuizFunnel({
           c: qs.get("c") ?? "",
           as: qs.get("as") ?? "",
           ad: qs.get("ad") ?? "",
+          cr: qs.get("cr") ?? "",
         }),
       });
       if (!res.ok) throw new Error();

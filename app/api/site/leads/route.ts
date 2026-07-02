@@ -57,10 +57,31 @@ export async function POST(req: NextRequest) {
   let fbc = pick(m, ["fbc", "_fbc"]);
   const fbp = pick(m, ["fbp", "_fbp"]);
   const fbclid = pick(m, ["fbclid"]);
-  // Метки атрибуции из URL (Meta подставляет через url_tags): c / as / ad.
-  const campaignId = pick(m, ["c", "campaign_id"]);
-  const adsetId = pick(m, ["as", "adset_id"]);
-  const adId = pick(m, ["ad", "ad_id"]);
+  // Метки атрибуции из URL: c/as/ad (макросы Meta) и cr — НАША метка креатива.
+  let campaignId = pick(m, ["c", "campaign_id"]);
+  let adsetId = pick(m, ["as", "adset_id"]);
+  let adId = pick(m, ["ad", "ad_id"]);
+  const cr = pick(m, ["cr"]);
+
+  // cr = id креатива (ad_launch_media) → надёжно определяем кампанию/объявление.
+  if (cr) {
+    const { data: media } = await admin
+      .from("ad_launch_media")
+      .select("meta_ad_id, launch_id")
+      .eq("id", cr)
+      .maybeSingle();
+    if (media) {
+      if (media.meta_ad_id) adId = media.meta_ad_id;
+      const { data: launch } = await admin
+        .from("ad_launches")
+        .select("campaign_id, adset_id")
+        .eq("id", media.launch_id)
+        .eq("project_id", project.id)
+        .maybeSingle();
+      if (launch?.campaign_id) campaignId = launch.campaign_id;
+      if (launch?.adset_id) adsetId = launch.adset_id;
+    }
+  }
 
   // Тестовый запрос Tilda / пустая отправка — без имени и телефона ничего не создаём.
   if (!name && !phone) return NextResponse.json({ ok: true });

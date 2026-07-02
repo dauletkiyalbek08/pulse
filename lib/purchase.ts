@@ -38,19 +38,55 @@ export async function recordPurchase(
 
   const { data: lead } = await admin
     .from("leads")
-    .select("id, external_id, fbc, fbp, phone")
+    .select("id, external_id, fbc, fbp, phone, full_name")
     .eq("id", leadId)
     .eq("project_id", projectId)
     .maybeSingle();
   if (!lead) return { ok: false, error: "Лид не найден", capi: "not_configured" };
 
-  // 1. Запись о продаже (с чеком, если есть)
+  // 1. Клиент: находим по телефону или создаём (для раздела «Клиенты», LTV).
+  let customerId: string | null = null;
+  {
+    let existing: { id: string; total_spent: number } | null = null;
+    if (lead.phone) {
+      const { data } = await admin
+        .from("customers")
+        .select("id, total_spent")
+        .eq("project_id", projectId)
+        .eq("phone", lead.phone)
+        .maybeSingle();
+      existing = data;
+    }
+    if (existing) {
+      customerId = existing.id;
+      await admin
+        .from("customers")
+        .update({ total_spent: Number(existing.total_spent) + amount })
+        .eq("id", existing.id);
+    } else {
+      const { data: created } = await admin
+        .from("customers")
+        .insert({
+          project_id: projectId,
+          full_name: lead.full_name || "Клиент",
+          phone: lead.phone ?? null,
+          first_purchase_at: new Date().toISOString(),
+          total_spent: amount,
+        })
+        .select("id")
+        .maybeSingle();
+      customerId = created?.id ?? null;
+    }
+  }
+
+  // 2. Запись о продаже (с чеком и привязкой к клиенту, если есть)
   const { data: sale } = await admin
     .from("sales")
     .insert({
       project_id: projectId,
       lead_id: leadId,
       manager_id: managerId,
+      customer_id: customerId,
       product: input.product?.trim() || null,
       amount,
       receipt_file_id: input.receiptFileId ?? null,
@@ -58,7 +94,7 @@ export async function recordPurchase(
     .select("id")
     .maybeSingle();
 
-  // 2. Лид → «Продажа», фиксируем сумму
+  // 3. Лид → «Продажа», фиксируем сумму
   await admin.from("leads").update({ status: "sale", value: amount }).eq("id", leadId);
 
   // 3. CAPI — только если подключён датасет И лид с рекламы (есть lead_id)

@@ -13,8 +13,6 @@ import {
   updateAdSetBudget,
   pauseCampaign,
   pauseAd,
-  fetchCampaignAdIds,
-  setAdUrlTags,
 } from "@/lib/meta-launch";
 import { fetchAdInsightsForCampaign, fetchCampaignSyncStatus, type AdInsight } from "@/lib/meta";
 import { rangeEndExclusive, type DateRange } from "@/lib/date-range";
@@ -200,32 +198,6 @@ export interface WebLaunchOutcome {
   ok: boolean;
   error?: string;
   notReady?: boolean;
-}
-
-/**
- * АВТО (без кнопки): один раз проставляет метки url_tags на объявления
- * кампании, чтобы новые клики привязывали лид к креативу. Вызывается лениво
- * при загрузке списка кампаний; помечает tags_backfilled, чтобы не повторять.
- */
-async function backfillTags(
-  admin: ReturnType<typeof createAdminClient>,
-  launchId: string,
-  campaignId: string,
-  token: string,
-): Promise<void> {
-  try {
-    const adIds = await fetchCampaignAdIds(token, campaignId);
-    for (const adId of adIds) {
-      try {
-        await setAdUrlTags(token, adId);
-      } catch {
-        // отдельное объявление могло не принять — продолжаем
-      }
-    }
-    await admin.from("ad_launches").update({ tags_backfilled: true }).eq("id", launchId);
-  } catch {
-    // кампания недоступна — попробуем при следующей загрузке
-  }
 }
 
 /* ─────────────── Итоги с рекламы (CRM: лиды/продажи/выручка) ─────────────── */
@@ -511,12 +483,6 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
       }
     }
     if (liveStatus === "canceled") continue; // удалена в Meta — не показываем
-
-    // Авто-привязка креативов: один раз проставляем метки на объявления кампании,
-    // чтобы новые клики привязывали лид к креативу. Без кнопок и ручной работы.
-    if (token && r.campaign_id && !r.tags_backfilled) {
-      await backfillTags(admin, r.id, r.campaign_id, token);
-    }
 
     // Инсайты по объявлениям (сумма = итог кампании, плюс разбивка по креативам).
     let adInsights: AdInsight[] = [];

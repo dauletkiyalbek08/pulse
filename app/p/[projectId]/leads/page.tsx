@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getProject, requireAccess, getEffectiveRole } from "@/lib/queries";
 import { getNiche } from "@/lib/niches";
 import { getCohortFunnel } from "@/lib/funnel";
@@ -50,7 +51,7 @@ export default async function LeadsPage({
   // Хантер видит только свои лиды
   let leadsQuery = supabase
     .from("leads")
-    .select("id, full_name, phone, source, status, assigned_to, value, created_at, external_id, note")
+    .select("id, full_name, phone, source, status, assigned_to, value, created_at, external_id, note, campaign_id, ad_id")
     .eq("project_id", projectId)
     .gte("created_at", range.from)
     .lt("created_at", rangeEndExclusive(range))
@@ -76,6 +77,34 @@ export default async function LeadsPage({
     : { data: [] };
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
 
+  // Названия кампании/креатива по меткам рекламы (ad_launches/media — только сервер).
+  const campIds = [...new Set(leadRows.map((l) => l.campaign_id).filter(Boolean))] as string[];
+  const adIds = [...new Set(leadRows.map((l) => l.ad_id).filter(Boolean))] as string[];
+  const campName = new Map<string, string>();
+  const creativePos = new Map<string, number>();
+  if (campIds.length || adIds.length) {
+    const admin = createAdminClient();
+    if (campIds.length) {
+      const { data: launches } = await admin
+        .from("ad_launches")
+        .select("campaign_id, headline")
+        .eq("project_id", projectId)
+        .in("campaign_id", campIds);
+      for (const l of launches ?? []) {
+        if (l.campaign_id && !campName.has(l.campaign_id)) campName.set(l.campaign_id, l.headline ?? "Кампания");
+      }
+    }
+    if (adIds.length) {
+      const { data: media } = await admin
+        .from("ad_launch_media")
+        .select("meta_ad_id, position")
+        .in("meta_ad_id", adIds);
+      for (const m of media ?? []) {
+        if (m.meta_ad_id) creativePos.set(m.meta_ad_id, m.position + 1);
+      }
+    }
+  }
+
   const rows: LeadRow[] = leadRows.map((l) => ({
     id: l.id,
     full_name: l.full_name,
@@ -86,6 +115,8 @@ export default async function LeadsPage({
     created_at: l.created_at,
     assigneeName: l.assigned_to ? nameById.get(l.assigned_to) ?? null : null,
     fromMeta: !!l.external_id,
+    adCampaign: l.campaign_id ? campName.get(l.campaign_id) ?? "Кампания" : null,
+    adCreative: l.ad_id ? (creativePos.has(l.ad_id) ? `креатив ${creativePos.get(l.ad_id)}` : "креатив") : null,
   }));
 
   // Кто может отмечать покупку (и запускать CAPI): продажи ведут менеджеры/руководство.

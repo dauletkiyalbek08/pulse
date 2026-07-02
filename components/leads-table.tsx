@@ -21,6 +21,8 @@ export interface LeadRow {
   created_at: string;
   assigneeName: string | null;
   fromMeta: boolean;
+  adCampaign?: string | null; // кампания рекламы (по метке)
+  adCreative?: string | null; // креатив/видео (по метке)
 }
 
 const selectClass =
@@ -153,7 +155,15 @@ export function LeadsTable({
                       </div>
                     </td>
                     <td className="px-5 py-3 text-muted">{lead.phone ?? "—"}</td>
-                    <td className="px-5 py-3 text-muted">{sourceLabel(lead.source)}</td>
+                    <td className="px-5 py-3 text-muted">
+                      {sourceLabel(lead.source)}
+                      {lead.adCampaign && (
+                        <div className="mt-0.5 text-xs text-brand-ink">
+                          🎯 {lead.adCampaign}
+                          {lead.adCreative && <span className="text-faint"> · {lead.adCreative}</span>}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-5 py-3">
                       {lead.assigneeName ? (
                         <div className="flex items-center gap-2">

@@ -143,6 +143,13 @@ export interface CreativeInput {
   videoId?: string; // для видео (id в Meta)
   imageUrl?: string; // для картинки (публичный URL)
   thumbUrl?: string | null; // превью видео
+  tag?: string; // наша метка креатива (id медиа) — вшиваем в ссылку (?cr=…)
+}
+
+/** Добавить query-параметр к URL (для метки креатива в ссылке). */
+function withParam(url: string, key: string, value: string): string {
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}${key}=${encodeURIComponent(value)}`;
 }
 
 export interface LaunchParams {
@@ -246,13 +253,15 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
 
   const adset = await graphPost<{ id: string }>(`act_${acc}/adsets`, p.token, adsetParams);
 
-  const cta = { type: "LEARN_MORE", value: { link: p.destinationUrl } };
-
   // 3–4. По объявлению на каждый креатив (видео или картинка) в одной группе.
   const ads: { creativeId: string; adId: string }[] = [];
   let i = 0;
   for (const c of p.creatives) {
     i += 1;
+    // Ссылка с НАШЕЙ меткой креатива (?cr=<id медиа>) — надёжная привязка
+    // лида к конкретному видео без зависимости от макросов Meta.
+    const link = c.tag ? withParam(p.destinationUrl, "cr", c.tag) : p.destinationUrl;
+    const cta = { type: "LEARN_MORE", value: { link } };
     const objectStorySpec: Record<string, unknown> = { page_id: p.pageId };
     if (c.kind === "video") {
       const videoData: Record<string, unknown> = {
@@ -265,7 +274,7 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
       objectStorySpec.video_data = videoData;
     } else {
       objectStorySpec.link_data = {
-        link: p.destinationUrl,
+        link,
         message: p.primaryText,
         name: p.headline,
         picture: c.imageUrl,
@@ -530,6 +539,7 @@ export async function launchFromDraft(admin: Admin, launchId: string): Promise<L
         videoId: m.metaVideoId ?? undefined,
         imageUrl: m.imageUrl ?? undefined,
         thumbUrl: m.thumbUrl,
+        tag: m.id ?? undefined, // id медиа → метка ?cr= в ссылке
       })),
       headline: draft.headline ?? "Ағылшын тілі курсы",
       primaryText: draft.primary_text ?? "Ағылшын тілін нөлден үйреніңіз.",
