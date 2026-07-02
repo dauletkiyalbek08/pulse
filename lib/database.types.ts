@@ -144,6 +144,7 @@ export type Database = {
           analyzed_at: string | null
           raise_suggested: boolean
           stop_suggested: boolean
+          tags_backfilled: boolean
           created_at: string
           updated_at: string
         }
@@ -173,6 +174,7 @@ export type Database = {
           analyzed_at?: string | null
           raise_suggested?: boolean
           stop_suggested?: boolean
+          tags_backfilled?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -202,6 +204,7 @@ export type Database = {
           analyzed_at?: string | null
           raise_suggested?: boolean
           stop_suggested?: boolean
+          tags_backfilled?: boolean
           created_at?: string
           updated_at?: string
         }

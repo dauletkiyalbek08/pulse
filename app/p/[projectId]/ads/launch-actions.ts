@@ -202,51 +202,29 @@ export interface WebLaunchOutcome {
 }
 
 /**
- * Включить авто-привязку креативов на уже запущенных кампаниях: проставляет
- * метки url_tags на все их объявления в Meta. После этого новые клики по
- * рекламе автоматически привязывают лид к конкретному креативу (ROAS по креативу).
- * Одноразовое действие; повторный вызов безопасен (просто перезапишет метки).
+ * АВТО (без кнопки): один раз проставляет метки url_tags на объявления
+ * кампании, чтобы новые клики привязывали лид к креативу. Вызывается лениво
+ * при загрузке списка кампаний; помечает tags_backfilled, чтобы не повторять.
  */
-export async function enableAttributionOnLive(projectId: string): Promise<{ ok: boolean; ads?: number; error?: string }> {
-  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
-  const admin = createAdminClient();
-  const { data: rows } = await admin
-    .from("ad_launches")
-    .select("campaign_id, purpose")
-    .eq("project_id", projectId)
-    .in("status", ["active", "paused"])
-    .not("campaign_id", "is", null);
-  if (!rows || rows.length === 0) return { ok: true, ads: 0 };
-
-  const tokenCache = new Map<string, string | null>();
-  async function tok(purpose: string): Promise<string | null> {
-    if (tokenCache.has(purpose)) return tokenCache.get(purpose) ?? null;
-    const t = await tokenForLaunch(admin, projectId, purpose);
-    tokenCache.set(purpose, t);
-    return t;
-  }
-
-  let count = 0;
-  for (const r of rows) {
-    if (!r.campaign_id) continue;
-    const token = await tok(r.purpose);
-    if (!token) continue;
-    try {
-      const adIds = await fetchCampaignAdIds(token, r.campaign_id);
-      for (const adId of adIds) {
-        try {
-          await setAdUrlTags(token, adId);
-          count += 1;
-        } catch {
-          // отдельное объявление могло не принять — продолжаем
-        }
+async function backfillTags(
+  admin: ReturnType<typeof createAdminClient>,
+  launchId: string,
+  campaignId: string,
+  token: string,
+): Promise<void> {
+  try {
+    const adIds = await fetchCampaignAdIds(token, campaignId);
+    for (const adId of adIds) {
+      try {
+        await setAdUrlTags(token, adId);
+      } catch {
+        // отдельное объявление могло не принять — продолжаем
       }
-    } catch {
-      // кампания недоступна — пропускаем
     }
+    await admin.from("ad_launches").update({ tags_backfilled: true }).eq("id", launchId);
+  } catch {
+    // кампания недоступна — попробуем при следующей загрузке
   }
-  revalidatePath(`/p/${projectId}/ads`);
-  return { ok: true, ads: count };
 }
 
 /* ─────────────── Итоги с рекламы (CRM: лиды/продажи/выручка) ─────────────── */
@@ -459,7 +437,7 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
   const admin = createAdminClient();
   const { data: rows } = await admin
     .from("ad_launches")
-    .select("id, headline, created_at, status, budget_usd, campaign_id, adset_id, purpose")
+    .select("id, headline, created_at, status, budget_usd, campaign_id, adset_id, purpose, tags_backfilled")
     .eq("project_id", projectId)
     .in("status", ["active", "paused"])
     .not("campaign_id", "is", null)
@@ -552,6 +530,12 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
       }
     }
     if (liveStatus === "canceled") continue; // удалена в Meta — не показываем
+
+    // Авто-привязка креативов: один раз проставляем метки на объявления кампании,
+    // чтобы новые клики привязывали лид к креативу. Без кнопок и ручной работы.
+    if (token && r.campaign_id && !r.tags_backfilled) {
+      await backfillTags(admin, r.id, r.campaign_id, token);
+    }
 
     // Инсайты по объявлениям (сумма = итог кампании, плюс разбивка по креативам).
     let adInsights: AdInsight[] = [];
