@@ -1,7 +1,52 @@
 /** Общие визуалы публичных лендингов: анимированный фон и сцена с достопримечательностями.
  *  Ключевые кадры анимаций живут в app/globals.css (классы hl-*). */
 
-/** Мягкие светящиеся пятна на тёмном фоне (спокойные, не мешают контенту). */
+/** Звёзды на всём тёмном фоне (заметные, мерцают). */
+const STARS: { x: number; y: number; s: number; d: string }[] = [
+  { x: 8, y: 10, s: 2, d: "hl-tw" },
+  { x: 18, y: 26, s: 1.5, d: "hl-tw2" },
+  { x: 27, y: 8, s: 2.5, d: "hl-tw" },
+  { x: 34, y: 20, s: 1.5, d: "hl-tw2" },
+  { x: 44, y: 6, s: 2, d: "hl-tw" },
+  { x: 52, y: 16, s: 1.5, d: "hl-tw2" },
+  { x: 62, y: 9, s: 2.5, d: "hl-tw" },
+  { x: 71, y: 22, s: 1.5, d: "hl-tw2" },
+  { x: 80, y: 7, s: 2, d: "hl-tw" },
+  { x: 89, y: 18, s: 1.5, d: "hl-tw2" },
+  { x: 94, y: 32, s: 2, d: "hl-tw" },
+  { x: 6, y: 40, s: 1.5, d: "hl-tw2" },
+  { x: 15, y: 55, s: 2, d: "hl-tw" },
+  { x: 88, y: 48, s: 2, d: "hl-tw2" },
+  { x: 96, y: 62, s: 1.5, d: "hl-tw" },
+  { x: 4, y: 68, s: 2, d: "hl-tw2" },
+  { x: 12, y: 82, s: 1.5, d: "hl-tw" },
+  { x: 92, y: 80, s: 2, d: "hl-tw2" },
+  { x: 82, y: 92, s: 1.5, d: "hl-tw" },
+  { x: 22, y: 92, s: 2, d: "hl-tw2" },
+];
+
+export function Starfield() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {STARS.map((st, i) => (
+        <span
+          key={i}
+          className={`${st.d} absolute rounded-full bg-white`}
+          style={{
+            left: `${st.x}%`,
+            top: `${st.y}%`,
+            width: `${st.s}px`,
+            height: `${st.s}px`,
+            boxShadow: "0 0 6px 1px rgba(255,255,255,0.8)",
+            animationDelay: `${(i % 5) * 0.4}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Мягкие светящиеся пятна + звёзды на тёмном фоне (спокойные, не мешают контенту). */
 export function LandingBlobs({ accent }: { accent: string }) {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -10,6 +55,7 @@ export function LandingBlobs({ accent }: { accent: string }) {
         style={{ backgroundColor: accent }}
       />
       <div className="hl-blob3 absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-sky-500 opacity-15 blur-3xl" />
+      <Starfield />
     </div>
   );
 }

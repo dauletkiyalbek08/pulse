@@ -96,7 +96,7 @@ body {
 }
 .hl-fly { animation: hlFly 8s ease-in-out infinite; }
 
-@keyframes hlTw { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.9; } }
+@keyframes hlTw { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 .hl-tw  { animation: hlTw 3s ease-in-out infinite; }
 .hl-tw2 { animation: hlTw 4.2s ease-in-out infinite; animation-delay: 1s; }
 
