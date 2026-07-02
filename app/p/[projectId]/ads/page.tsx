@@ -190,7 +190,7 @@ export default async function AdsPage({
               <WebLaunch projectId={projectId} defaultBudget={launch.config.dailyBudgetUsd} />
             </div>
             <LaunchedCampaigns projectId={projectId} campaigns={launchedCampaigns} />
-            <AdLeads projectId={projectId} leads={adLeads} rangeLabel={range.label} />
+            <AdLeads leads={adLeads} rangeLabel={range.label} />
           </div>
         ) : (
           <div className="rounded-card border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">

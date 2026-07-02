@@ -320,20 +320,6 @@ export async function getAdLeadList(projectId: string, range: DateRange): Promis
   }));
 }
 
-/** Удалить лид (и связанные продажи/пробные) — например тестовые заявки. */
-export async function deleteAdLead(projectId: string, leadId: string): Promise<{ ok: boolean; error?: string }> {
-  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
-  const admin = createAdminClient();
-  // Дочерние записи с запретом на удаление (NO ACTION) — убираем первыми.
-  // Остальные ссылки (заметки, CAPI, звонки, черновики) каскадятся/обнуляются сами.
-  await admin.from("sales").delete().eq("project_id", projectId).eq("lead_id", leadId);
-  await admin.from("trials").delete().eq("lead_id", leadId);
-  const { error } = await admin.from("leads").delete().eq("project_id", projectId).eq("id", leadId);
-  if (error) return { ok: false, error: "Не удалось удалить" };
-  revalidatePath(`/p/${projectId}/ads`);
-  return { ok: true };
-}
-
 /* ─────────────── Запущенные кампании: список + анализ + действия ─────────────── */
 
 type Verdict = "good" | "ok" | "bad" | "early";

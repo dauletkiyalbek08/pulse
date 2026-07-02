@@ -91,6 +91,9 @@ export default async function LeadsPage({
   // Кто может отмечать покупку (и запускать CAPI): продажи ведут менеджеры/руководство.
   const canSell = ["owner", "director", "head_sales", "manager"].includes(role ?? "");
 
+  // Кто может удалять лиды (тестовые и т.п.): руководство + маркетинг/таргет.
+  const canDelete = ["owner", "director", "marketer", "targetologist"].includes(role ?? "");
+
   // РОП/директор может вручную раздать «зависшие» лиды без хантера.
   const canDistribute = ["owner", "director", "head_sales"].includes(role ?? "");
   let unassignedCount = 0;
@@ -166,7 +169,7 @@ export default async function LeadsPage({
         <NewLeadForm projectId={projectId} />
       </div>
 
-      <LeadsTable rows={rows} niche={niche.key} projectId={projectId} canSell={canSell} />
+      <LeadsTable rows={rows} niche={niche.key} projectId={projectId} canSell={canSell} canDelete={canDelete} />
     </div>
   );
 }

@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search, RotateCcw } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Search, RotateCcw, Trash2, Loader2 } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { Pill } from "@/components/pill";
 import { PurchaseButton } from "@/components/purchase-button";
+import { deleteLead } from "@/app/p/[projectId]/leads/actions";
 import { getLeadStatusMeta, leadStatusOrder, sourceLabel } from "@/lib/leads";
 import type { Niche } from "@/lib/niches";
 import { formatCurrency, formatDateTime } from "@/lib/format";
@@ -29,15 +31,31 @@ export function LeadsTable({
   niche,
   projectId,
   canSell = false,
+  canDelete = false,
 }: {
   rows: LeadRow[];
   niche: Niche;
   projectId: string;
   canSell?: boolean;
+  canDelete?: boolean;
 }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [source, setSource] = useState("");
+
+  function remove(lead: LeadRow) {
+    if (!confirm(`Удалить лид «${lead.full_name}»? Действие необратимо.`)) return;
+    setBusyId(lead.id);
+    startTransition(async () => {
+      const r = await deleteLead(projectId, lead.id);
+      setBusyId(null);
+      if (r.ok) router.refresh();
+      else alert(r.error ?? "Ошибка");
+    });
+  }
 
   const sources = useMemo(
     () => [...new Set(rows.map((r) => r.source).filter(Boolean))] as string[],
@@ -117,6 +135,7 @@ export function LeadsTable({
                 <th className="px-5 py-3 text-right font-medium">Сумма</th>
                 <th className="px-5 py-3 font-medium">Пришёл</th>
                 {canSell && <th className="px-5 py-3" />}
+                {canDelete && <th className="px-5 py-3" />}
               </tr>
             </thead>
             <tbody>
@@ -168,6 +187,23 @@ export function LeadsTable({
                             fromMeta={lead.fromMeta}
                           />
                         )}
+                      </td>
+                    )}
+                    {canDelete && (
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => remove(lead)}
+                          disabled={pending}
+                          title="Удалить лид"
+                          className="text-faint transition hover:text-red-600 disabled:opacity-50"
+                        >
+                          {busyId === lead.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
                       </td>
                     )}
                   </tr>
