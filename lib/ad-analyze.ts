@@ -1,24 +1,28 @@
 /**
- * Авто-анализ авто-кампаний (v2): раз в день крон смотрит расход/лиды каждой
- * запущенной через Pulse кампании, считает CPL и присылает в бот СОВЕТ с кнопками
+ * Авто-анализ авто-кампаний (v3): раз в день крон смотрит расход/лиды/ПРОДАЖИ
+ * каждой запущенной через Pulse кампании. Есть продажи → судим по окупаемости
+ * (ROAS), нет продаж → по лидам/CPL. Присылает в бот СОВЕТ с кнопками
  * (поднять бюджет / остановить). Меняет что-либо только по нажатию пользователя.
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptSecret } from "@/lib/crypto";
 import { fetchCampaignInsights, fetchCampaignSyncStatus } from "@/lib/meta";
+import { getRevenueByCampaign } from "@/lib/ad-revenue";
 import { sendMessage, type InlineButton } from "@/lib/telegram";
 import { almatyYmd } from "@/lib/reports-tg";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-// Пороги (целевой CPL курса — до $3). Настраиваемо при желании.
-const GOOD_CPL = 3; // дешевле — предлагаем поднять бюджет
-const BAD_CPL = 5; // дороже — предлагаем остановить
+// Пороги. Приоритет — деньги (ROAS): есть продажи → судим по окупаемости.
+const GOOD_ROAS = 2; // выручка вдвое+ расхода — предлагаем масштаб
+const BAD_ROAS = 1; // выручка меньше расхода — в минус, предлагаем стоп
 const MIN_SPEND_JUDGE = 3; // пока потрачено меньше — рано судить
 const NO_LEAD_STOP_SPEND = 5; // потрачено столько без лидов — предлагаем стоп
+const NO_SALE_STOP_SPEND = 15; // потрачено столько без единой продажи — предлагаем стоп
 
 const usd = (n: number) => `$${(Math.round(n * 100) / 100).toFixed(2)}`;
+const kzt = (n: number) => `${Math.round(n).toLocaleString("ru-RU")} ₸`;
 
 /** Чат для уведомления: чат запуска или Telegram создателя в этом проекте. */
 async function notifyChat(admin: Admin, launch: { chat_id: number | null; project_id: string; created_by: string | null }) {
@@ -70,6 +74,16 @@ export async function runAdAnalysis(admin: Admin): Promise<{ checked: number; no
     return tok;
   }
 
+  // Курс ₸/$ по проекту (для ROAS), по одному разу.
+  const rateByProject = new Map<string, number>();
+  async function rateFor(projectId: string): Promise<number> {
+    if (rateByProject.has(projectId)) return rateByProject.get(projectId) as number;
+    const { data } = await admin.from("projects").select("usd_rate").eq("id", projectId).maybeSingle();
+    const rate = Number(data?.usd_rate ?? 500);
+    rateByProject.set(projectId, rate);
+    return rate;
+  }
+
   let notified = 0;
 
   for (const l of launches) {
@@ -98,20 +112,40 @@ export async function runAdAnalysis(admin: Admin): Promise<{ checked: number; no
     await admin.from("ad_launches").update({ analyzed_at: new Date().toISOString() }).eq("id", l.id);
 
     if (spend < MIN_SPEND_JUDGE) continue; // рано судить
-    const cpl = leads > 0 ? spend / leads : 0;
+
+    // Выручка/продажи по кампании (реклама → лид → продажа) и ROAS.
+    const rev = (await getRevenueByCampaign(admin, l.project_id, [l.campaign_id])).get(l.campaign_id) ?? {
+      sales: 0,
+      revenue: 0,
+    };
+    const usdRate = await rateFor(l.project_id);
+    const spendKzt = spend * usdRate;
+    const roas = spendKzt > 0 ? rev.revenue / spendKzt : 0;
     const label = l.headline ? `«${l.headline}»` : "авто-кампания";
 
     let action: "raise" | "stop" | null = null;
     let text = "";
-    if (leads === 0 && spend >= NO_LEAD_STOP_SPEND) {
-      action = "stop";
-      text = `⚠️ ${label}: потрачено ${usd(spend)}, лидов пока <b>0</b>. Похоже, не заходит — остановить?`;
-    } else if (leads > 0 && cpl <= GOOD_CPL) {
-      action = "raise";
-      text = `📈 ${label} работает хорошо: CPL <b>${usd(cpl)}</b> (лидов ${leads}, потрачено ${usd(spend)}). Поднять бюджет и масштабировать?`;
-    } else if (leads > 0 && cpl > BAD_CPL) {
-      action = "stop";
-      text = `⚠️ ${label}: CPL <b>${usd(cpl)}</b> дороговат (лидов ${leads}, потрачено ${usd(spend)}). Остановить?`;
+    if (rev.sales > 0) {
+      // Есть продажи — судим по деньгам (ROAS).
+      if (roas >= GOOD_ROAS) {
+        action = "raise";
+        text = `💰 ${label} прибыльная: продаж <b>${rev.sales}</b>, выручка ${kzt(rev.revenue)} при расходе ${usd(spend)} — ROAS <b>${roas.toFixed(1)}×</b>. Поднять бюджет и масштабировать?`;
+      } else if (roas < BAD_ROAS) {
+        action = "stop";
+        text = `⚠️ ${label} в минус: выручка ${kzt(rev.revenue)} меньше расхода (${usd(spend)}), ROAS <b>${roas.toFixed(1)}×</b> (продаж ${rev.sales}). Остановить?`;
+      }
+      // 1×–2× — окупается, не трогаем.
+    } else {
+      // Продаж ещё нет — следим, чтобы не сливать бюджет.
+      if (spend >= NO_SALE_STOP_SPEND) {
+        action = "stop";
+        text = `⚠️ ${label}: потрачено ${usd(spend)}, продаж пока <b>0</b> (лидов ${leads}). Не окупается — остановить?`;
+      } else if (leads === 0 && spend >= NO_LEAD_STOP_SPEND) {
+        action = "stop";
+        text = `⚠️ ${label}: потрачено ${usd(spend)}, лидов <b>0</b>. Похоже, не заходит — остановить?`;
+      }
+      // Лиды идут, но продаж ещё нет — вслепую не масштабируем,
+      // ждём первую продажу как сигнал окупаемости.
     }
 
     if (!action) continue;

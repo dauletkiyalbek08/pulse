@@ -274,6 +274,9 @@ export async function launchAdSet(p: LaunchParams): Promise<LaunchIds> {
     const creative = await graphPost<{ id: string }>(`act_${acc}/adcreatives`, p.token, {
       name: `${base} · креатив ${i}`,
       object_story_spec: objectStorySpec,
+      // Метки для атрибуции: Meta подставит id кампании/группы/объявления в URL,
+      // лендинг сохранит их в лид → продажи связываются с кампанией (ROAS).
+      url_tags: "c={{campaign.id}}&as={{adset.id}}&ad={{ad.id}}",
       // Отказ от авто-«расширений браузера» (Позвонить/Messenger/WhatsApp/Форма).
       degrees_of_freedom_spec: {
         creative_features_spec: { site_extensions: { enroll_status: "OPT_OUT" } },

@@ -105,11 +105,21 @@ export function HeroLanding({
     try {
       const fbc = getCookie("_fbc");
       const fbp = getCookie("_fbp");
-      const fbclid = new URLSearchParams(window.location.search).get("fbclid") ?? "";
+      const qs = new URLSearchParams(window.location.search);
+      const fbclid = qs.get("fbclid") ?? "";
       const res = await fetch(`/api/site/leads?t=${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone: `+7${phone}`, fbc, fbp, fbclid }),
+        body: JSON.stringify({
+          name,
+          phone: `+7${phone}`,
+          fbc,
+          fbp,
+          fbclid,
+          c: qs.get("c") ?? "",
+          as: qs.get("as") ?? "",
+          ad: qs.get("ad") ?? "",
+        }),
       });
       if (!res.ok) throw new Error();
       const w = window as unknown as { fbq?: (...a: unknown[]) => void };

@@ -57,6 +57,10 @@ export async function POST(req: NextRequest) {
   let fbc = pick(m, ["fbc", "_fbc"]);
   const fbp = pick(m, ["fbp", "_fbp"]);
   const fbclid = pick(m, ["fbclid"]);
+  // Метки атрибуции из URL (Meta подставляет через url_tags): c / as / ad.
+  const campaignId = pick(m, ["c", "campaign_id"]);
+  const adsetId = pick(m, ["as", "adset_id"]);
+  const adId = pick(m, ["ad", "ad_id"]);
 
   // Тестовый запрос Tilda / пустая отправка — без имени и телефона ничего не создаём.
   if (!name && !phone) return NextResponse.json({ ok: true });
@@ -75,6 +79,9 @@ export async function POST(req: NextRequest) {
       fbc: fbc || null,
       fbp: fbp || null,
       note: note || null,
+      campaign_id: campaignId || null,
+      adset_id: adsetId || null,
+      ad_id: adId || null,
     })
     .select("id")
     .maybeSingle();

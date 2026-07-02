@@ -10,13 +10,14 @@ import {
 } from "@/app/p/[projectId]/ads/launch-actions";
 
 const VERDICT: Record<LaunchedCampaign["verdict"], { label: string; cls: string }> = {
-  good: { label: "Отлично", cls: "bg-brand-soft text-brand-ink" },
-  ok: { label: "Норма", cls: "bg-canvas text-muted ring-1 ring-line" },
-  bad: { label: "Слабо", cls: "bg-red-50 text-red-600" },
+  good: { label: "Прибыльная", cls: "bg-brand-soft text-brand-ink" },
+  ok: { label: "Окупается", cls: "bg-canvas text-muted ring-1 ring-line" },
+  bad: { label: "В минус", cls: "bg-red-50 text-red-600" },
   early: { label: "Мало данных", cls: "bg-amber-50 text-amber-700" },
 };
 
 const usd = (n: number, d = 2) => `$${(Math.round(n * 100) / 100).toFixed(d)}`;
+const kzt = (n: number) => `${Math.round(n).toLocaleString("ru-RU")} ₸`;
 
 export function LaunchedCampaigns({
   projectId,
@@ -61,7 +62,7 @@ export function LaunchedCampaigns({
         </span>
         <div>
           <div className="text-sm font-semibold text-ink">Запущенные кампании</div>
-          <div className="text-xs text-muted">Анализ Pulse: CPL, вердикт и действия. Советы также приходят в бот.</div>
+          <div className="text-xs text-muted">Анализ Pulse: расход, продажи, окупаемость (ROAS) и действия. Советы также приходят в бот.</div>
         </div>
       </div>
 
@@ -91,6 +92,15 @@ export function LaunchedCampaigns({
                   <span>Расход: <b className="text-ink">{usd(c.spend)}</b></span>
                   <span>Лиды: <b className="text-ink">{c.leads}</b></span>
                   <span>CPL: <b className="text-ink">{c.leads > 0 ? usd(c.cpl) : "—"}</b></span>
+                  <span>Продажи: <b className="text-ink">{c.sales}</b></span>
+                  <span>Выручка: <b className="text-ink">{c.revenueKzt > 0 ? kzt(c.revenueKzt) : "—"}</b></span>
+                  <span>
+                    ROAS:{" "}
+                    <b className={c.sales > 0 ? (c.roas >= 1 ? "text-brand-ink" : "text-red-600") : "text-ink"}>
+                      {c.sales > 0 ? `${c.roas.toFixed(1)}×` : "—"}
+                    </b>
+                  </span>
+                  {c.sales > 0 && <span>Цена продажи: <b className="text-ink">{usd(c.costPerSaleUsd)}</b></span>}
                 </div>
 
                 {!paused && (

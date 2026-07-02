@@ -14,6 +14,7 @@ import {
   pauseCampaign,
 } from "@/lib/meta-launch";
 import { fetchCampaignInsights, fetchCampaignSyncStatus } from "@/lib/meta";
+import { getRevenueByCampaign } from "@/lib/ad-revenue";
 import { almatyYmd } from "@/lib/reports-tg";
 
 const MANAGE_ROLES = ["owner", "director", "marketer", "targetologist"];
@@ -208,12 +209,37 @@ export interface LaunchedCampaign {
   spend: number;
   leads: number;
   cpl: number;
+  sales: number;
+  revenueKzt: number;
+  roas: number; // выручка / расход (в одной валюте)
+  costPerSaleUsd: number;
   verdict: "good" | "ok" | "bad" | "early";
   canScale: boolean;
 }
 
 const GOOD_CPL = 3;
-const BAD_CPL = 5;
+const NO_SALE_STOP_SPEND = 15; // потрачено столько без единой продажи — тревога
+
+/** Вердикт кампании: если есть продажи — по окупаемости (ROAS), иначе по лидам/CPL. */
+function campaignVerdict(o: {
+  spend: number;
+  leads: number;
+  cpl: number;
+  sales: number;
+  roas: number;
+}): LaunchedCampaign["verdict"] {
+  if (o.spend < 3) return "early";
+  if (o.sales > 0) {
+    if (o.roas >= 2) return "good";
+    if (o.roas >= 1) return "ok";
+    return "bad";
+  }
+  // Продаж ещё нет
+  if (o.spend >= NO_SALE_STOP_SPEND) return "bad";
+  if (o.leads === 0 && o.spend >= 5) return "bad";
+  if (o.leads > 0 && o.cpl <= GOOD_CPL) return "ok";
+  return "ok";
+}
 
 /** Список запущенных авто-кампаний проекта с живыми расход/лиды/CPL из Meta. */
 export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedCampaign[]> {
@@ -228,6 +254,12 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
     .order("created_at", { ascending: false })
     .limit(20);
   if (!rows || rows.length === 0) return [];
+
+  // Курс ₸/$ и выручка по кампаниям (реклама → лид → продажа).
+  const { data: proj } = await admin.from("projects").select("usd_rate").eq("id", projectId).maybeSingle();
+  const usdRate = Number(proj?.usd_rate ?? 500);
+  const campaignIds = rows.map((r) => r.campaign_id).filter((v): v is string => !!v);
+  const revByCampaign = await getRevenueByCampaign(admin, projectId, campaignIds);
 
   const tokens = new Map<string, string | null>();
   async function tok(purpose: string): Promise<string | null> {
@@ -276,11 +308,11 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
       }
     }
     const cpl = leads > 0 ? spend / leads : 0;
-    let verdict: LaunchedCampaign["verdict"] = "ok";
-    if (spend < 3) verdict = "early";
-    else if (leads === 0 && spend >= 5) verdict = "bad";
-    else if (leads > 0 && cpl <= GOOD_CPL) verdict = "good";
-    else if (leads > 0 && cpl > BAD_CPL) verdict = "bad";
+    const rev = (r.campaign_id && revByCampaign.get(r.campaign_id)) || { sales: 0, revenue: 0 };
+    const spendKzt = spend * usdRate;
+    const roas = spendKzt > 0 ? rev.revenue / spendKzt : 0;
+    const costPerSaleUsd = rev.sales > 0 ? spend / rev.sales : 0;
+    const verdict = campaignVerdict({ spend, leads, cpl, sales: rev.sales, roas });
     out.push({
       id: r.id,
       headline: r.headline ?? "Авто-кампания",
@@ -290,6 +322,10 @@ export async function getLaunchedCampaigns(projectId: string): Promise<LaunchedC
       spend,
       leads,
       cpl,
+      sales: rev.sales,
+      revenueKzt: rev.revenue,
+      roas,
+      costPerSaleUsd,
       verdict,
       canScale: liveStatus === "active" && !!r.adset_id,
     });
