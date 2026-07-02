@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Loader2, CheckCircle2, ArrowLeft, Sparkles } from "lucide-react";
 import type { QuizQuestion } from "@/lib/quiz-sample";
-import { LandingBlobs, Flags, Skyline, LANDING_CSS } from "@/components/landing-visuals";
+import { LandingBlobs, Flags, Skyline } from "@/components/landing-visuals";
 
 function getCookie(name: string): string {
   if (typeof document === "undefined") return "";
@@ -108,7 +108,6 @@ export function QuizFunnel({
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#0b1020] text-white">
-      <style>{LANDING_CSS}</style>
       <LandingBlobs accent={accent} />
 
       <div className="relative mx-auto flex min-h-screen max-w-lg flex-col px-5 py-8">

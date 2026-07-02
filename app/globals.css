@@ -58,3 +58,67 @@ body {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
+
+/* ============================================================
+   Публичные лендинги (/l/[slug]) — анимации
+   Держим в глобальном CSS (надёжно грузятся), а не инлайном.
+   ============================================================ */
+@keyframes hlFade {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.hl-fade { opacity: 0; animation: hlFade 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+
+/* Плавное «парение» — на ВНУТРЕННЕЙ группе, чтобы не перебивать
+   позиционирующий transform="translate()" у SVG-групп. */
+@keyframes hlFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.hl-float  { animation: hlFloat 4.5s ease-in-out infinite; }
+.hl-float2 { animation: hlFloat 5.5s ease-in-out infinite; animation-delay: 0.8s; }
+
+@keyframes hlBlob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(18px, 22px) scale(1.12); }
+}
+.hl-blob  { animation: hlBlob 16s ease-in-out infinite; }
+.hl-blob3 { animation: hlBlob 20s ease-in-out infinite reverse; }
+
+@keyframes hlFlag { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(14deg); } }
+.hl-flag { display: inline-block; transform-origin: bottom left; animation: hlFlag 2.8s ease-in-out infinite; }
+
+@keyframes hlPlaneMini { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(5px); } }
+.hl-planeMini { display: inline-block; animation: hlPlaneMini 2.2s ease-in-out infinite; }
+
+/* Самолётик летит по дуге (взлёт → полёт → посадка) с наклоном. */
+@keyframes hlFly {
+  0%   { transform: translate(30px, 66px) rotate(28deg); }
+  50%  { transform: translate(160px, 8px) rotate(0deg); }
+  100% { transform: translate(288px, 66px) rotate(-28deg); }
+}
+.hl-fly { animation: hlFly 8s ease-in-out infinite; }
+
+@keyframes hlTw { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.9; } }
+.hl-tw  { animation: hlTw 3s ease-in-out infinite; }
+.hl-tw2 { animation: hlTw 4.2s ease-in-out infinite; animation-delay: 1s; }
+
+@keyframes hlPop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.hl-pop { animation: hlPop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* Кнопка «дышит» мягким свечением. */
+@keyframes hlPulse {
+  0%, 100% { box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35); }
+  50%      { box-shadow: 0 12px 34px rgba(16, 185, 129, 0.6); }
+}
+.hl-cta { animation: hlPulse 2.6s ease-in-out infinite; }
+.hl-cta:hover { transform: translateY(-1px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hl-fade, .hl-float, .hl-float2, .hl-blob, .hl-blob3, .hl-flag,
+  .hl-planeMini, .hl-fly, .hl-tw, .hl-tw2, .hl-pop, .hl-cta {
+    animation: none !important;
+  }
+  .hl-fade { opacity: 1; }
+}
