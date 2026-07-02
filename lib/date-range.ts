@@ -36,7 +36,7 @@ export const RANGE_PRESETS: { key: Exclude<RangePreset, "custom">; label: string
   { key: "lastWeek", label: "Прошлая неделя" },
 ];
 
-const DEFAULT_PRESET: RangePreset = "last7";
+const DEFAULT_PRESET: RangePreset = "today";
 
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
