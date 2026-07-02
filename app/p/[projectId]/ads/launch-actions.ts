@@ -199,6 +199,55 @@ export interface WebLaunchOutcome {
   notReady?: boolean;
 }
 
+/* ─────────────── Итоги с рекламы (CRM: лиды/продажи/выручка) ─────────────── */
+
+// Источники лидов, которые считаем «рекламными».
+const AD_SOURCES = ["site", "facebook", "meta", "instagram", "tiktok"];
+
+export interface AdCrmTotals {
+  leads: number;
+  sales: number;
+  revenueKzt: number;
+  usdRate: number;
+}
+
+/**
+ * Итоги с рекламы из CRM за период (по умолчанию 30 дней): сколько пришло
+ * лидов с рекламных источников и сколько из них купили (выручка ₸).
+ * Считает ВСЕ такие продажи, даже без привязки к конкретной кампании/креативу.
+ */
+export async function getAdCrmTotals(projectId: string, days = 30): Promise<AdCrmTotals> {
+  const empty: AdCrmTotals = { leads: 0, sales: 0, revenueKzt: 0, usdRate: 500 };
+  if (!(await canManage(projectId))) return empty;
+  const admin = createAdminClient();
+
+  const { data: proj } = await admin.from("projects").select("usd_rate").eq("id", projectId).maybeSingle();
+  const usdRate = Number(proj?.usd_rate ?? 500);
+
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const { data: leads } = await admin
+    .from("leads")
+    .select("id")
+    .eq("project_id", projectId)
+    .in("source", AD_SOURCES)
+    .gte("created_at", since);
+
+  const leadIds = (leads ?? []).map((l) => l.id);
+  let sales = 0;
+  let revenueKzt = 0;
+  if (leadIds.length > 0) {
+    const { data: s } = await admin
+      .from("sales")
+      .select("amount")
+      .eq("project_id", projectId)
+      .in("lead_id", leadIds);
+    sales = s?.length ?? 0;
+    revenueKzt = (s ?? []).reduce((a, r) => a + (Number(r.amount) || 0), 0);
+  }
+
+  return { leads: leads?.length ?? 0, sales, revenueKzt, usdRate };
+}
+
 /* ─────────────── Запущенные кампании: список + анализ + действия ─────────────── */
 
 type Verdict = "good" | "ok" | "bad" | "early";
