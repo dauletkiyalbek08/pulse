@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Loader2,
   CheckCircle2,
@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { LandingBlobs, Flags, Skyline } from "@/components/landing-visuals";
+import { newSessionId } from "@/lib/session-id";
 
 function getCookie(name: string): string {
   if (typeof document === "undefined") return "";
@@ -40,6 +41,7 @@ const DEFAULT_BULLETS = [
  */
 export function HeroLanding({
   token,
+  landingId,
   pixelId,
   title,
   subtitle,
@@ -50,6 +52,7 @@ export function HeroLanding({
   socials,
 }: {
   token: string;
+  landingId?: string;
   pixelId: string | null;
   logo?: string | null;
   title: string;
@@ -67,6 +70,29 @@ export function HeroLanding({
   const [err, setErr] = useState<string | null>(null);
 
   const items = bullets.length > 0 ? bullets : DEFAULT_BULLETS;
+
+  // Трекинг воронки: показ (шаг 0) и отправка заявки (submitted).
+  const sessionRef = useRef<string>("");
+  if (!sessionRef.current) sessionRef.current = newSessionId();
+
+  const track = (step: number, submitted = false) => {
+    if (!landingId) return;
+    try {
+      fetch(`/api/site/track?t=${encodeURIComponent(token)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ landing: landingId, session: sessionRef.current, step, submitted }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      /* аналитика не критична */
+    }
+  };
+
+  useEffect(() => {
+    track(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,6 +114,7 @@ export function HeroLanding({
       if (!res.ok) throw new Error();
       const w = window as unknown as { fbq?: (...a: unknown[]) => void };
       if (pixelId && typeof w.fbq === "function") w.fbq("track", "Lead");
+      track(1, true);
       setDone(true);
     } catch {
       setErr("Жіберілмеді. Қайта көріңіз.");

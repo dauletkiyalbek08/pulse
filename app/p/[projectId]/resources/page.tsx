@@ -2,7 +2,9 @@ import { Megaphone } from "lucide-react";
 import { requireAccess } from "@/lib/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseQuestions } from "@/lib/quiz-sample";
+import { getLandingFunnel, type LandingFunnel } from "@/lib/landing-funnel";
 import { PageHeader } from "@/components/page-header";
+import { LandingFunnelView } from "@/components/landing-funnel";
 import {
   LandingEditor,
   CreateLandingButton,
@@ -43,6 +45,18 @@ export default async function ResourcesPage({ params }: { params: Promise<{ proj
     start_button: l.start_button,
   }));
 
+  // Воронка по каждому лендингу (из landing_sessions за 30 дней).
+  const funnels: Record<string, LandingFunnel> = {};
+  await Promise.all(
+    landings.map(async (l) => {
+      funnels[l.id] = await getLandingFunnel(admin, {
+        id: l.id,
+        type: l.type,
+        questionCount: l.questions.length,
+      });
+    }),
+  );
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <PageHeader title="Ресурсы / Воронки" subtitle="Лендинги и квизы под таргет — заявки сразу в CRM и хантеру">
@@ -68,9 +82,12 @@ export default async function ResourcesPage({ params }: { params: Promise<{ proj
           останется отредактировать под себя.
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-8">
           {landings.map((l) => (
-            <LandingEditor key={l.id} projectId={projectId} landing={l} />
+            <div key={l.id} className="space-y-3">
+              <LandingEditor projectId={projectId} landing={l} />
+              <LandingFunnelView funnel={funnels[l.id]} />
+            </div>
           ))}
         </div>
       )}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, CheckCircle2, ArrowLeft, Sparkles } from "lucide-react";
 import type { QuizQuestion } from "@/lib/quiz-sample";
 import { LandingBlobs, Flags, Skyline } from "@/components/landing-visuals";
+import { newSessionId } from "@/lib/session-id";
 
 function getCookie(name: string): string {
   if (typeof document === "undefined") return "";
@@ -20,6 +21,7 @@ export interface QuizSocials {
 /** Публичная квиз-воронка: интро → вопросы → форма. Лид уходит в /api/site/leads. */
 export function QuizFunnel({
   token,
+  landingId,
   pixelId,
   title,
   subtitle,
@@ -31,6 +33,7 @@ export function QuizFunnel({
   socials,
 }: {
   token: string;
+  landingId?: string;
   pixelId: string | null;
   logo?: string | null;
   title: string;
@@ -51,6 +54,36 @@ export function QuizFunnel({
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Трекинг воронки: сессия + отправка самого дальнего шага (без ПДн).
+  const sessionRef = useRef<string>("");
+  if (!sessionRef.current) sessionRef.current = newSessionId();
+  const sentStep = useRef(-1);
+
+  const track = useCallback(
+    (s: number, submitted = false) => {
+      if (!landingId) return;
+      try {
+        fetch(`/api/site/track?t=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ landing: landingId, session: sessionRef.current, step: s, submitted }),
+          keepalive: true,
+        }).catch(() => {});
+      } catch {
+        /* аналитика не критична */
+      }
+    },
+    [landingId, token],
+  );
+
+  // Первый показ + каждый новый максимальный шаг.
+  useEffect(() => {
+    if (step > sentStep.current) {
+      sentStep.current = step;
+      track(step);
+    }
+  }, [step, track]);
 
   function pick(qi: number, option: string) {
     setAnswers((a) => {
@@ -82,6 +115,7 @@ export function QuizFunnel({
       if (!res.ok) throw new Error();
       const w = window as unknown as { fbq?: (...a: unknown[]) => void };
       if (pixelId && typeof w.fbq === "function") w.fbq("track", "Lead");
+      track(total + 1, true);
       setDone(true);
     } catch {
       setErr("Жіберілмеді. Қайта көріңіз.");

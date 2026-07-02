@@ -28,7 +28,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
   const { data: landing } = await admin
     .from("landings")
     .select(
-      "project_id, type, title, subtitle, bullets, button_text, thanks_text, accent, pixel_id, status, logo, start_button, questions, socials",
+      "id, project_id, type, title, subtitle, bullets, button_text, thanks_text, accent, pixel_id, status, logo, start_button, questions, socials",
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -56,6 +56,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
         {pixel}
         <QuizFunnel
           token={token}
+          landingId={landing.id}
           pixelId={landing.pixel_id}
           logo={landing.logo}
           title={landing.title}
@@ -80,6 +81,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
       {pixel}
       <HeroLanding
         token={token}
+        landingId={landing.id}
         pixelId={landing.pixel_id}
         logo={landing.logo}
         title={landing.title}

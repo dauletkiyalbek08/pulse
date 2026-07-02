@@ -1234,6 +1234,39 @@ export type Database = {
           },
         ]
       }
+      landing_sessions: {
+        Row: {
+          id: string
+          project_id: string
+          landing_id: string
+          session: string
+          max_step: number
+          submitted: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          landing_id: string
+          session: string
+          max_step?: number
+          submitted?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          landing_id?: string
+          session?: string
+          max_step?: number
+          submitted?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       capi_config: {
         Row: {
           connected_by: string | null
@@ -1569,6 +1602,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      track_landing_session: {
+        Args: {
+          p_project: string
+          p_landing: string
+          p_session: string
+          p_step: number
+          p_submitted: boolean
+        }
+        Returns: undefined
+      }
       is_owner: { Args: Record<string, never>; Returns: boolean }
       is_project_member: { Args: { pid: string }; Returns: boolean }
       can_manage_finance: { Args: { pid: string }; Returns: boolean }
