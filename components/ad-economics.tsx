@@ -14,12 +14,14 @@ export function AdEconomics({
   sales,
   revenueKzt,
   usdRate,
+  rangeLabel,
 }: {
   spendUsd: number;
   leads: number;
   sales: number;
   revenueKzt: number;
   usdRate: number;
+  rangeLabel: string;
 }) {
   const spendKzt = spendUsd * usdRate;
   const roas = spendKzt > 0 ? revenueKzt / spendKzt : 0;
@@ -28,7 +30,7 @@ export function AdEconomics({
   return (
     <div className="rounded-card bg-surface p-5 shadow-soft ring-1 ring-line">
       <div className="mb-3">
-        <div className="text-sm font-semibold text-ink">Итого с рекламы · 30 дней</div>
+        <div className="text-sm font-semibold text-ink">Итого с рекламы · {rangeLabel}</div>
         <div className="text-xs text-muted">
           Расход — по кампаниям Pulse. Лиды и продажи — реальные из CRM (источник: сайт / Meta),
           включая продажи без привязки к конкретному креативу.

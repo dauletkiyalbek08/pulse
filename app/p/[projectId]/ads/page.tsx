@@ -70,8 +70,8 @@ export default async function AdsPage({
   const vacancyStatus = statuses.find((s) => s.purpose === "vacancy") ?? null;
 
   const launchedCampaigns = tab === "launch" ? await getLaunchedCampaigns(projectId) : [];
-  const adTotals = tab === "launch" ? await getAdCrmTotals(projectId) : null;
-  const adLeads = tab === "launch" ? await getAdLeadList(projectId) : [];
+  const adTotals = tab === "launch" ? await getAdCrmTotals(projectId, range) : null;
+  const adLeads = tab === "launch" ? await getAdLeadList(projectId, range) : [];
   const launchSpendTotal = launchedCampaigns.reduce((s, c) => s + c.spend, 0);
 
   const courseCampaigns = campaigns.filter((c) => c.objective === "course");
@@ -106,7 +106,7 @@ export default async function AdsPage({
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <PageHeader title="Реклама" subtitle="Кабинеты Meta, запуск кампаний и аналитика — в долларах $">
-        {tab === "analytics" && (
+        {(tab === "analytics" || tab === "launch") && (
           <DateRangePicker preset={range.preset} from={range.from} to={range.to} label={range.label} />
         )}
       </PageHeader>
@@ -177,6 +177,7 @@ export default async function AdsPage({
                 sales={adTotals.sales}
                 revenueKzt={adTotals.revenueKzt}
                 usdRate={adTotals.usdRate}
+                rangeLabel={range.label}
               />
             )}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -189,7 +190,7 @@ export default async function AdsPage({
               <WebLaunch projectId={projectId} defaultBudget={launch.config.dailyBudgetUsd} />
             </div>
             <LaunchedCampaigns projectId={projectId} campaigns={launchedCampaigns} />
-            <AdLeads leads={adLeads} />
+            <AdLeads projectId={projectId} leads={adLeads} rangeLabel={range.label} />
           </div>
         ) : (
           <div className="rounded-card border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">

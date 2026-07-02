@@ -17,6 +17,7 @@ import {
   setAdUrlTags,
 } from "@/lib/meta-launch";
 import { fetchAdInsightsForCampaign, fetchCampaignSyncStatus, type AdInsight } from "@/lib/meta";
+import { rangeEndExclusive, type DateRange } from "@/lib/date-range";
 import { getRevenueByCampaign, getRevenueByAd } from "@/lib/ad-revenue";
 import { almatyYmd } from "@/lib/reports-tg";
 
@@ -240,11 +241,11 @@ export interface AdCrmTotals {
 }
 
 /**
- * Итоги с рекламы из CRM за период (по умолчанию 30 дней): сколько пришло
- * лидов с рекламных источников и сколько из них купили (выручка ₸).
- * Считает ВСЕ такие продажи, даже без привязки к конкретной кампании/креативу.
+ * Итоги с рекламы из CRM за диапазон дат: сколько пришло лидов с рекламных
+ * источников и сколько из них купили (выручка ₸). Считает ВСЕ такие продажи,
+ * даже без привязки к конкретной кампании/креативу.
  */
-export async function getAdCrmTotals(projectId: string, days = 30): Promise<AdCrmTotals> {
+export async function getAdCrmTotals(projectId: string, range: DateRange): Promise<AdCrmTotals> {
   const empty: AdCrmTotals = { leads: 0, sales: 0, revenueKzt: 0, usdRate: 500 };
   if (!(await canManage(projectId))) return empty;
   const admin = createAdminClient();
@@ -252,13 +253,13 @@ export async function getAdCrmTotals(projectId: string, days = 30): Promise<AdCr
   const { data: proj } = await admin.from("projects").select("usd_rate").eq("id", projectId).maybeSingle();
   const usdRate = Number(proj?.usd_rate ?? 500);
 
-  const since = new Date(Date.now() - days * 86400000).toISOString();
   const { data: leads } = await admin
     .from("leads")
     .select("id")
     .eq("project_id", projectId)
     .in("source", AD_SOURCES)
-    .gte("created_at", since);
+    .gte("created_at", range.from)
+    .lt("created_at", rangeEndExclusive(range));
 
   const leadIds = (leads ?? []).map((l) => l.id);
   let sales = 0;
@@ -277,6 +278,7 @@ export async function getAdCrmTotals(projectId: string, days = 30): Promise<AdCr
 }
 
 export interface AdLead {
+  leadId: string;
   name: string;
   phone: string | null;
   status: string;
@@ -285,22 +287,22 @@ export interface AdLead {
 }
 
 /**
- * Все лиды с рекламы (квиз/сайт/Meta) за период — поимённо, покупатели вперёд.
+ * Все лиды с рекламы (квиз/сайт/Meta) за диапазон — поимённо, покупатели вперёд.
  * Это люди, пришедшие с рекламы; привязка к конкретной кампании/креативу
  * подтягивается автоматически с новых кликов (см. url_tags).
  */
-export async function getAdLeadList(projectId: string, days = 30): Promise<AdLead[]> {
+export async function getAdLeadList(projectId: string, range: DateRange): Promise<AdLead[]> {
   if (!(await canManage(projectId))) return [];
   const admin = createAdminClient();
-  const since = new Date(Date.now() - days * 86400000).toISOString();
   const { data: leads } = await admin
     .from("leads")
     .select("id, full_name, phone, status, created_at")
     .eq("project_id", projectId)
     .in("source", AD_SOURCES)
-    .gte("created_at", since)
+    .gte("created_at", range.from)
+    .lt("created_at", rangeEndExclusive(range))
     .order("created_at", { ascending: false })
-    .limit(80);
+    .limit(200);
   if (!leads || leads.length === 0) return [];
 
   const ids = leads.map((l) => l.id);
@@ -309,12 +311,27 @@ export async function getAdLeadList(projectId: string, days = 30): Promise<AdLea
   for (const s of sales ?? []) if (s.lead_id) bought.add(s.lead_id);
 
   return leads.map((l) => ({
+    leadId: l.id,
     name: l.full_name,
     phone: l.phone,
     status: l.status,
     createdAt: l.created_at,
     bought: bought.has(l.id),
   }));
+}
+
+/** Удалить лид (и связанные продажи/пробные) — например тестовые заявки. */
+export async function deleteAdLead(projectId: string, leadId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!(await canManage(projectId))) return { ok: false, error: "Недостаточно прав" };
+  const admin = createAdminClient();
+  // Дочерние записи с запретом на удаление (NO ACTION) — убираем первыми.
+  // Остальные ссылки (заметки, CAPI, звонки, черновики) каскадятся/обнуляются сами.
+  await admin.from("sales").delete().eq("project_id", projectId).eq("lead_id", leadId);
+  await admin.from("trials").delete().eq("lead_id", leadId);
+  const { error } = await admin.from("leads").delete().eq("project_id", projectId).eq("id", leadId);
+  if (error) return { ok: false, error: "Не удалось удалить" };
+  revalidatePath(`/p/${projectId}/ads`);
+  return { ok: true };
 }
 
 /* ─────────────── Запущенные кампании: список + анализ + действия ─────────────── */
